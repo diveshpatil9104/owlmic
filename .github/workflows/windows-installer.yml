@@ -1,15 +1,17 @@
 name: Windows installer
 
 # Builds owlmic.exe and Owlmic-Setup-x.y.z.exe on Windows. The installer bundles the Owlmic microphone
-# driver files, downloaded here and checked against a known checksum.
+# driver files and adb, both downloaded here at pinned versions and checked against known checksums.
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
+  # The Release workflow calls this one for version tags.
+  workflow_call:
   pull_request:
     paths:
       - 'pc/installer/**'
       - 'pc/Cargo.toml'
+      - 'pc/crates/**'
+      - 'pc/vcam/**'
       - '.github/workflows/windows-installer.yml'
 
 permissions:
@@ -22,6 +24,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # libopus, built from the same submodule as the Android app.
+          submodules: recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -97,6 +102,22 @@ jobs:
           }
           Expand-Archive $zip -DestinationPath pc\installer\driver -Force
 
+      - name: Download adb
+        shell: pwsh
+        run: |
+          # platform-tools r37.0.1; only adb.exe and its two DLLs are shipped.
+          $zip = "$env:RUNNER_TEMP\platform-tools.zip"
+          $expectedHash = '45F4D63113E895EBDE0C90F194099A4676B6AC653BD28D54314A9E022BBC1A99'
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri 'https://dl.google.com/android/repository/platform-tools_r37.0.1-win.zip' -OutFile $zip -UseBasicParsing
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $expectedHash) { throw "Unexpected platform-tools checksum: $hash" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\pt" -Force
+          New-Item -ItemType Directory -Force pc\installer\adb | Out-Null
+          foreach ($f in 'adb.exe', 'AdbWinApi.dll', 'AdbWinUsbApi.dll') {
+            Copy-Item "$env:RUNNER_TEMP\pt\platform-tools\$f" pc\installer\adb\
+          }
+
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
@@ -109,6 +130,20 @@ jobs:
           & $iscc.FullName "/DMyAppVersion=$version" pc\installer\owlmic.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item pc\target\release\owlmic.exe "pc\installer\Output\Owlmic-v$version-windows-x64.exe"
+
+      - name: Check the installer size
+        shell: pwsh
+        run: |
+          # The design's budget: about 4 MB, never above 5 MB.
+          $limit = 5MB
+          foreach ($f in 'pc\target\release\owlmic.exe', 'pc\target\release\owlmic_vcam.dll', 'pc\softcam.dll', 'pc\installer\adb\adb.exe') {
+            '{0,-40} {1,8:N2} MB' -f $f, ((Get-Item $f).Length / 1MB)
+          }
+          '{0,-40} {1,8:N2} MB' -f 'pc\installer\driver (all files)', ((Get-ChildItem pc\installer\driver -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
+          $setup = Get-Item pc\installer\Output\Owlmic-Setup-*.exe
+          $size = $setup.Length
+          '{0,-40} {1,8:N2} MB' -f $setup.Name, ($size / 1MB)
+          if ($size -gt $limit) { throw ("The installer is {0:N2} MB, above the 5 MB budget." -f ($size / 1MB)) }
 
       - name: Upload the installer and owlmic.exe
         uses: actions/upload-artifact@v7

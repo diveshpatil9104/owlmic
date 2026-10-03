@@ -1,0 +1,174 @@
+//! The camera's way out (SYSTEM_DESIGN section 17.2): whole H.264 frames are decoded, shaped
+//! (Fill or Fit, Mirror) to 1920 x 1080 and delivered to Owlmic Cam: the shared frame ring on
+//! Windows 11, softcam on Windows 10. Runs only while the phone's camera streams.
+
+use crate::audio::Com;
+use crate::decoder::Decoder;
+use crate::softcam::Softcam;
+use owlmic_media::video::receiver::VideoReceiver;
+use owlmic_media::video::{Framing, Nv12};
+use owlmic_ui::preview::{self, Preview};
+use owlmic_vcam::shared::{HEIGHT, Mapping, WIDTH};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+use windows::Win32::System::SystemInformation::GetTickCount64;
+
+/// No picture for this long and the camera shows the placeholder.
+const STALE: Duration = Duration::from_secs(2);
+/// The ring exists only while an app has Owlmic Cam open; look for it this often.
+const RETRY_OPEN: Duration = Duration::from_secs(1);
+
+/// What the PC shows, changed live from the panel (SYSTEM_DESIGN section 17.2).
+#[derive(Default)]
+pub struct Shape {
+    fit: AtomicBool,
+    mirror: AtomicBool,
+}
+
+impl Shape {
+    pub fn set(&self, framing: Framing, mirror: bool) {
+        self.fit.store(framing == Framing::Fit, Ordering::Relaxed);
+        self.mirror.store(mirror, Ordering::Relaxed);
+    }
+
+    fn get(&self) -> (Framing, bool) {
+        let framing = if self.fit.load(Ordering::Relaxed) {
+            Framing::Fit
+        } else {
+            Framing::Fill
+        };
+        (framing, self.mirror.load(Ordering::Relaxed))
+    }
+}
+
+/// Where pictures go.
+pub enum Feed {
+    Ring {
+        mapping: Option<Mapping>,
+        tried: Option<Instant>,
+    },
+    Softcam {
+        cam: Arc<Softcam>,
+        bgr: Vec<u8>,
+        placeholder: Arc<Vec<u8>>,
+    },
+}
+
+impl Feed {
+    fn write(&mut self, picture: &Nv12) {
+        match self {
+            Feed::Ring { mapping, tried } => {
+                if mapping.is_none() && tried.is_none_or(|t| t.elapsed() >= RETRY_OPEN) {
+                    *mapping = Mapping::open();
+                    *tried = Some(Instant::now());
+                }
+                if let Some(m) = mapping {
+                    m.ring.write(&picture.data, unsafe { GetTickCount64() });
+                }
+            }
+            Feed::Softcam { cam, bgr, .. } => {
+                picture.to_bgr(bgr);
+                cam.send(bgr);
+            }
+        }
+    }
+
+    /// On Windows 11 the camera falls back by itself when pictures stop.
+    fn placeholder(&mut self) {
+        if let Feed::Softcam {
+            cam, placeholder, ..
+        } = self
+        {
+            cam.send(placeholder);
+        }
+    }
+}
+
+/// The placeholder picture in softcam's BGR, drawn once.
+pub fn placeholder_bgr() -> Vec<u8> {
+    let mut bgr = Vec::new();
+    owlmic_vcam::placeholder::render(WIDTH, HEIGHT).to_bgr(&mut bgr);
+    bgr
+}
+
+pub struct CameraOutput {
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl CameraOutput {
+    pub fn start(
+        receiver: Arc<VideoReceiver>,
+        shape: Arc<Shape>,
+        feed: Feed,
+        preview: Arc<Preview>,
+    ) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let s = stop.clone();
+        let thread = std::thread::Builder::new()
+            .name("video".into())
+            .spawn(move || run(&receiver, &shape, feed, &preview, &s))
+            .ok();
+        Self { stop, thread }
+    }
+}
+
+impl Drop for CameraOutput {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+fn run(
+    receiver: &VideoReceiver,
+    shape: &Shape,
+    mut feed: Feed,
+    preview: &Preview,
+    stop: &AtomicBool,
+) {
+    let _com = Com::init();
+    // Windows N editions ship without Media Foundation: the camera keeps its placeholder.
+    let Ok(mut decoder) = Decoder::new() else {
+        feed.placeholder();
+        return;
+    };
+    let mut out = Nv12::black(WIDTH, HEIGHT);
+    let mut last = Instant::now();
+    let mut previewed = Instant::now();
+    let mut showing_placeholder = false;
+    while !stop.load(Ordering::Acquire) {
+        let Some(frame) = receiver.next_frame(Duration::from_millis(250)) else {
+            if !showing_placeholder && last.elapsed() >= STALE {
+                feed.placeholder();
+                showing_placeholder = true;
+            }
+            continue;
+        };
+        match decoder.decode(&frame.data) {
+            Ok(Some(picture)) => {
+                let (framing, mirror) = shape.get();
+                picture.shape_into(&mut out, framing, mirror);
+                feed.write(&out);
+                last = Instant::now();
+                showing_placeholder = false;
+                if preview.wanted()
+                    && previewed.elapsed() >= Duration::from_millis(preview::EVERY_MS)
+                {
+                    previewed = last;
+                    preview.put(|px| out.to_bgra_scaled(preview::WIDTH, preview::HEIGHT, px));
+                }
+            }
+            Ok(None) => {}
+            Err(_) => {
+                decoder.flush();
+                receiver.resync();
+            }
+        }
+    }
+    feed.placeholder();
+}

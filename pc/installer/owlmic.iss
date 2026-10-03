@@ -1,14 +1,17 @@
-; Owlmic Windows installer (Inno Setup 6). Installs owlmic.exe and the Owlmic virtual microphone,
-; opens the firewall on private networks for TCP 7653 and UDP 7654, and can start Owlmic at sign-in.
+; Owlmic Windows installer (Inno Setup 6). Installs owlmic.exe, Owlmic Mic, Owlmic Cam and adb, opens the
+; firewall for TCP 7653 and UDP 7654 to 7655, and starts Owlmic at sign-in.
 ;
-; Build: ISCC /DMyAppVersion=x.y.z owlmic.iss, with owlmic.exe built and the Owlmic microphone driver files in
-; installer\driver (the CI workflow windows-installer.yml does both).
+; Build: ISCC /DMyAppVersion=x.y.z owlmic.iss, after cargo build --release and with the Owlmic microphone
+; driver files in installer\driver and adb in installer\adb (the CI workflow windows-installer.yml does all three).
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0"
 #endif
 #ifndef OwlmicExe
   #define OwlmicExe "..\target\release\owlmic.exe"
+#endif
+#ifndef OwlmicVcam
+  #define OwlmicVcam "..\target\release\owlmic_vcam.dll"
 #endif
 #define MyAppName "Owlmic"
 #define MyAppPublisher "Owlmic Contributors"
@@ -33,7 +36,7 @@ OutputBaseFilename={#MyAppName}-Setup-{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-MinVersion=10.0
+MinVersion=10.0.17763
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
@@ -53,7 +56,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#OwlmicExe}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
+Source: "{#OwlmicVcam}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\softcam.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "adb\*"; DestDir: "{app}\adb"; Flags: ignoreversion
 Source: "setup-audio-device.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "driver\*"; DestDir: "{app}\driver"; Flags: ignoreversion recursesubdirs
@@ -70,17 +75,21 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: 
 ; Owlmic's rules from an earlier install, so reinstalling or upgrading doesn't add them twice.
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic TCP"""; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic UDP Beacon"""; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic UDP Media"""; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic"""; Flags: runhidden
-Filename: "regsvr32.exe"; Parameters: "/s ""{app}\softcam.dll"""; StatusMsg: "Registering virtual camera..."; Flags: runhidden
+; Windows 11 gets its built-in virtual camera, Windows 10 the softcam filter; owlmic.exe picks.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-camera"; StatusMsg: "Adding Owlmic Cam..."; Flags: runhidden waituntilterminated
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Owlmic TCP"" dir=in action=allow protocol=TCP localport=7653 profile=any"; StatusMsg: "Letting your phone reach Owlmic..."; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Owlmic UDP Beacon"" dir=in action=allow protocol=UDP localport=7654 profile=any"; StatusMsg: "Letting your phone find Owlmic..."; Flags: runhidden
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Owlmic UDP Media"" dir=in action=allow protocol=UDP localport=7655 profile=any"; StatusMsg: "Letting your phone connect..."; Flags: runhidden
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "OwlmicKill"
-Filename: "regsvr32.exe"; Parameters: "/u /s ""{app}\softcam.dll"""; Flags: runhidden; RunOnceId: "OwlmicSoftcam"
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-camera"; Flags: runhidden waituntilterminated; RunOnceId: "OwlmicCamera"
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic TCP"""; Flags: runhidden; RunOnceId: "OwlmicFirewallTcp"
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic UDP Beacon"""; Flags: runhidden; RunOnceId: "OwlmicFirewallUdp"
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic UDP Media"""; Flags: runhidden; RunOnceId: "OwlmicFirewallMedia"
 
 [Code]
 var

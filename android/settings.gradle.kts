@@ -20,4 +20,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Owlmic"
-include(":app")
+include(":app", ":core", ":media")

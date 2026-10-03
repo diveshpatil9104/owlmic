@@ -1,0 +1,75 @@
+{
+  "comment": "Generated with Python cryptography (OpenSSL); both apps must reproduce every value.",
+  "curve": "P-256",
+  "hash": "SHA-256",
+  "phoneStatic": {
+    "private": "bbe8a34916ef5a11c8d9e76a5178d4e9f2e50856305981884ff1c62473604b33",
+    "public": "043a33a54ff02fc1e27064c1bbce9e1bb30bc55495d4b429d19d85e5dc2826e976d57d1064ad2608a183c9cf8588645086f06f090313451bec8436eb8db0111605"
+  },
+  "pcStatic": {
+    "private": "254e0361ba862f9413e4aab2f81f9c6aea401cf832dc0e96387a9b4370936a88",
+    "public": "04d99eda10cb0ee6744bcd918378334c10867556164e23525d6782af42c03231c69323018a2a11c5c1886d78b4ec9963ead66ee679822a270bd5fa49290b55dca0"
+  },
+  "phoneEphemeral": {
+    "private": "9784ab6cc7343533bc31a2aa3c9d5a5460265a53a5e6ba18085808986672f721",
+    "public": "04f16311f48a2e1736d9499743304aee31b2f79a859d1273acb16bec2e75096f0cdd16eddebe519ea40e7263b2d34eeddd6c90c2eb85f3edbe885a70316137b8e8"
+  },
+  "pcEphemeral": {
+    "private": "ac86d12041d142b6596079a8c9d8fe3ad0cf2b05f45fcff82f3f5286aa38fc5b",
+    "public": "04c60dbbe0824cd6bb1f90f247cc7f492cd9d13977e700795689190bc0fade0bab50b39cadd236f46725b0a6df0c414c95d4e60398daf3eee4a135b16555167edd"
+  },
+  "phoneId": "000102030405060708090a0b0c0d0e0f",
+  "pcId": "02020202020202020202020202020202",
+  "phoneNonce": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "pcNonce": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+  "helloPayload": "{\"proto\":3,\"phoneId\":\"000102030405060708090a0b0c0d0e0f\",\"name\":\"Pixel 7\"}",
+  "helloAckPayload": "{\"proto\":3,\"pcId\":\"02020202020202020202020202020202\",\"name\":\"DESKTOP-A\",\"status\":\"new\"}",
+  "expected": {
+    "pcKeyHint": "125955df0ff3518c",
+    "staticShared": "778ca33815e4f752a6eb42458672793e5b757a11aee4ae000e274096edee067a",
+    "pairingKey": "8677f7972f6dfcb52cd291332f1706c948129153ee17e7c45dd6dd9b1ebbd38e",
+    "transcript": "f79536caaa21b5061f0ad5a8ff251d75f85fb3f76f4818d48bc892289cf02f47",
+    "ephemeralShared": "109120315fe96ffafa584eb895946cb3dea3d9312d5e422b5a95915b510a9ee0",
+    "sessionMaster": "09893bfe328494687e8d4c7aba06b44f0a1e462c562dad760807cb138896994a",
+    "phoneToPc": "e9bf80b0c991078ccf27c1eca57de64cbe490f38411d1c5fb8e4dbccf8f7f9a2",
+    "pcToPhone": "e9f185ce184c8d96b291b256f37f6a84e937c4863f2cc6d2562c91f0ef892940",
+    "auth": "480664914e6da6e4aca5023bb3ac7f05943b66cdc0079bc265ef5576e15f98e4",
+    "proofPhone": "fb62f42e5e8cb07689e4bf7a6b70be8df119cdad42ebb9468b1832ee263a9b8d",
+    "proofPc": "741cc0a5e9c10a57670194998ebf66d657342a3e8ac97393578b3b8503a962c6",
+    "approvalCode": "1790",
+    "sessionId": "0f0e0d0c0b0a09080706050403020100",
+    "carrierMac": "e98198d5b1d569c974cc7d1144f78918"
+  },
+  "aead": [
+    {
+      "name": "media stream 1",
+      "key": "phoneToPc",
+      "stream": 1,
+      "counter": 7,
+      "headerHex": "01000000000700075300",
+      "plaintextHex": "6f707573206672616d65",
+      "nonceHex": "010000000000000000000007",
+      "sealedHex": "8e542a5229dbb6eb11189ea92358ba3355d5656cee5f6d97674a"
+    },
+    {
+      "name": "media stream 3",
+      "key": "pcToPhone",
+      "stream": 3,
+      "counter": 8,
+      "headerHex": "0300000000080000a8c0",
+      "plaintextHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+      "nonceHex": "030000000000000000000008",
+      "sealedHex": "11d2108a827455f882efb8be504e7b7f12328fc3b7dd58dafaa38313b46172bdf13830700afae0848c9036436143ab60a9e89c35d43b577b8a943695d7660d5f"
+    },
+    {
+      "name": "control frame",
+      "key": "phoneToPc",
+      "stream": 255,
+      "counter": 0,
+      "headerHex": "2000003b",
+      "plaintextHex": "7b226d6963223a226f6e222c2263616d657261223a226f6666222c22737065616b6572223a226f6666227d",
+      "nonceHex": "ff0000000000000000000000",
+      "sealedHex": "c8156a6134d3799f0566ee5522803cc3a33024a0f2c1859335205e4cc8cc8a1929a615d62431af0603ce3d2aa9a16271b36f11ce044bc6686a5849"
+    }
+  ]
+}

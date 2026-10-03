@@ -1,0 +1,78 @@
+{
+  "channelBytes": {
+    "control": 1,
+    "media": 2
+  },
+  "maxControlPayload": 1048576,
+  "controlHeaders": [
+    {
+      "type": 1,
+      "length": 0,
+      "hex": "01000000"
+    },
+    {
+      "type": 33,
+      "length": 300,
+      "hex": "2100012c"
+    },
+    {
+      "type": 63,
+      "length": 1048576,
+      "hex": "3f100000"
+    }
+  ],
+  "controlHeadersRejected": [
+    {
+      "name": "payloadTooLong",
+      "hex": "01100001"
+    },
+    {
+      "name": "mediaMarker",
+      "hex": "80000a00"
+    }
+  ],
+  "mediaHeaders": [
+    {
+      "stream": 1,
+      "keyframe": false,
+      "seq": 1,
+      "timestampUs": 0,
+      "hex": "01000000000100000000"
+    },
+    {
+      "stream": 2,
+      "keyframe": true,
+      "seq": 4294967295,
+      "timestampUs": 4294967295,
+      "hex": "0201ffffffffffffffff"
+    },
+    {
+      "stream": 3,
+      "keyframe": false,
+      "seq": 305419896,
+      "timestampUs": 10000,
+      "hex": "03001234567800002710"
+    }
+  ],
+  "fragmentHeaders": [
+    {
+      "frame": 0,
+      "index": 0,
+      "count": 1,
+      "hex": "00000001"
+    },
+    {
+      "frame": 65535,
+      "index": 3,
+      "count": 7,
+      "hex": "ffff0307"
+    }
+  ],
+  "maxFragmentPayload": 1200,
+  "streamWrap": [
+    {
+      "packetHex": "01000000000700075300112233",
+      "hex": "80000d01000000000700075300112233"
+    }
+  ]
+}

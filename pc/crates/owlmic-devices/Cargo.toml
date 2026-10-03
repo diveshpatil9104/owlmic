@@ -1,0 +1,20 @@
+[package]
+name = "owlmic-devices"
+description = "The Device Hub: Owlmic Mic, Owlmic Cam, loopback capture, PC speaker mute, health checks and repair"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+owlmic-hub.workspace = true
+owlmic-media.workspace = true
+owlmic-settings.workspace = true
+owlmic-ui.workspace = true
+base64.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+owlmic-vcam.workspace = true
+windows.workspace = true
+windows-core.workspace = true

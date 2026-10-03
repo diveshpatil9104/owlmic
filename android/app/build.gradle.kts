@@ -13,6 +13,9 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        // The native code (Oboe, Opus) is built for phones only; Android has been 64-bit or ARMv7 on every phone since 8.0.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
@@ -31,18 +34,11 @@ android {
     buildFeatures {
         compose = true
     }
-
-    // libopus and the JNI wrapper. Needs CMake and the opus submodule (git submodule update --init).
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            // Any CMake from here up, whether from the SDK manager or the PATH.
-            version = "3.22.1+"
-        }
-    }
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(project(":media"))
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)

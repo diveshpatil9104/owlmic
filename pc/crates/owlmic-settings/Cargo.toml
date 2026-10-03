@@ -1,0 +1,17 @@
+[package]
+name = "owlmic-settings"
+description = "The settings model, kept per pairing, and its store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+owlmic-hub.workspace = true
+owlmic-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
