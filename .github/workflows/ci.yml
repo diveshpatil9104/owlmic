@@ -36,7 +36,7 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-
 
       - name: Rustfmt
-        run: cargo fmt --check --manifest-path pc/Cargo.toml
+        run: cargo fmt --all --check --manifest-path pc/Cargo.toml
 
       - name: Clippy
         run: cargo clippy --manifest-path pc/Cargo.toml --all-targets -- -D warnings
