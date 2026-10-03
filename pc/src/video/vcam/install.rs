@@ -1,7 +1,5 @@
 //! Automatic per-user and system-wide DirectShow virtual camera installation and registry management.
 
-#![cfg(windows)]
-
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 

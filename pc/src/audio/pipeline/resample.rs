@@ -11,10 +11,9 @@ impl JitterBuffer {
         let mut playout = self.playout.lock().unwrap();
         let mut buf = self.buffer.lock().unwrap();
         let target = self.adaptive_target_samples.load(Ordering::Relaxed);
-        let gain = self.get_auto_gain();
         let step = SAMPLE_RATE as f32 / self.output_rate.load(Ordering::Relaxed) as f32;
 
-        drift_resample_pop(&mut buf, out, ch, target, step, &mut playout, gain);
+        drift_resample_pop(&mut buf, out, ch, target, step, &mut playout);
     }
 }
 
@@ -69,7 +68,6 @@ pub(crate) fn drift_resample_pop(
     target: usize,
     step: f32,
     play: &mut Playout,
-    gain: f32,
 ) {
     let frames_needed = out.len() / channels;
 
@@ -114,7 +112,7 @@ pub(crate) fn drift_resample_pop(
         let s0 = buf[0] as f32;
         let s1 = buf.get(1).map_or(s0, |&s| s as f32);
         let s2 = buf.get(2).map_or(s1, |&s| s as f32);
-        let mut level = gain / 32768.0;
+        let mut level = 1.0 / 32768.0;
         if play.fade_in > 0 {
             level *= 1.0 - play.fade_in as f32 / FADE_FRAMES as f32;
             play.fade_in -= 1;
@@ -155,10 +153,10 @@ pub(crate) fn soft_clip(x: f32) -> f32 {
     x.signum() * (SOFT_CLIP_KNEE + room * (over / room).tanh())
 }
 
-pub(crate) fn update_peak_level(peak: &std::sync::atomic::AtomicUsize, samples: &[i16], gain: f32) {
+pub(crate) fn update_peak_level(peak: &std::sync::atomic::AtomicUsize, samples: &[i16]) {
     let max_val = samples
         .iter()
-        .map(|&s| ((s as f32) * gain).abs() as usize)
+        .map(|&s| (s as i32).unsigned_abs() as usize)
         .max()
         .unwrap_or(0);
     let cur = peak.load(std::sync::atomic::Ordering::Relaxed);

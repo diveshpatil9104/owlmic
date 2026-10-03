@@ -1,10 +1,9 @@
 //! Thread-safe Virtual Camera manager for Owlmic.
 
 pub mod api;
-#[cfg(windows)]
 pub mod install;
 
-use super::decoder::DecodedFrame;
+use super::frame::Frame;
 use api::SoftcamApi;
 use std::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
@@ -14,7 +13,7 @@ const FPS: f32 = 30.0;
 /// Owlmic Cam's only size. Apps like Chrome remember a camera's sizes from when they last listed
 /// cameras, which for a DirectShow camera only happens again after a real camera comes or goes,
 /// and softcam only serves the size it was created at. A camera that changed size showed nothing
-/// in them, so it never changes: every picture is scaled to fit (video-pipeline.md).
+/// in them, so it never changes: every picture is scaled to fit.
 pub const WIDTH: usize = 1920;
 pub const HEIGHT: usize = 1080;
 
@@ -68,14 +67,14 @@ impl VirtualCamera {
         matches!(self.api.get(), Some(Some(_)))
     }
 
-    /// The neutral frame for when the camera is off (media-pipeline.md).
+    /// The neutral frame for when the camera is off.
     pub fn show_off_frame(&self) {
-        self.push_frame(&DecodedFrame::placeholder(WIDTH, HEIGHT));
+        self.push_frame(&Frame::placeholder(WIDTH, HEIGHT));
     }
 
     /// Sends a frame to the virtual camera. softcam paces sends to FPS, so this can block for up
     /// to a frame.
-    pub fn push_frame(&self, frame: &DecodedFrame) {
+    pub fn push_frame(&self, frame: &Frame) {
         let Some(Some(api)) = self.api.get() else {
             return;
         };
@@ -155,7 +154,7 @@ mod tests {
             (1080, 1080),
             (720, 1280),
         ] {
-            cam.push_frame(&DecodedFrame::new(w, h, vec![128; w * h * 3]));
+            cam.push_frame(&Frame::new(w, h, vec![128; w * h * 3]));
         }
         cam.show_off_frame();
 

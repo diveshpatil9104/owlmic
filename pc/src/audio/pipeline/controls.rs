@@ -1,5 +1,4 @@
-//! Processing switches the phone owns (wire-protocol.md CONTROL), next to the ones in mod.rs,
-//! and the output device's rate.
+//! Processing switches the phone owns, next to the ones in mod.rs, and the output device's rate.
 
 use super::JitterBuffer;
 use std::sync::atomic::Ordering;

@@ -29,47 +29,6 @@ fn test_jitter_buffer_prebuffering_and_levels() {
     jb.pop_samples(&mut out, 1);
     // Output must be non-zero after prebuffer
     assert!(out.iter().any(|&v| v.abs() > 0.0));
-    assert!(jb.get_auto_gain() >= MIN_AUTO_GAIN);
-}
-
-#[test]
-fn test_auto_normalization_speech_boost_and_noise_hold() {
-    let jb = JitterBuffer::new();
-    assert!((jb.get_auto_gain() - 1.0).abs() < 0.01);
-
-    // 1. Noise tone below noise floor (amplitude 200, RMS ~141 < NOISE_FLOOR_I16 350)
-    let mut noise = [0i16; 480];
-    for (i, s) in noise.iter_mut().enumerate() {
-        let val = (2.0 * std::f32::consts::PI * 440.0 * (i as f32) / 48000.0).sin();
-        *s = (val * 200.0) as i16;
-    }
-    for _ in 0..50 {
-        jb.push_samples(&noise);
-    }
-    assert_eq!(
-        jb.get_auto_gain(),
-        1.0,
-        "ambient noise below floor must not pump gain"
-    );
-
-    // 2. Quiet speech tone (amplitude 1200, RMS ~848 > NOISE_FLOOR_I16 350)
-    let mut speech = [0i16; 480];
-    for (i, s) in speech.iter_mut().enumerate() {
-        let val = (2.0 * std::f32::consts::PI * 440.0 * (i as f32) / 48000.0).sin();
-        *s = (val * 1200.0) as i16;
-    }
-    for _ in 0..100 {
-        jb.push_samples(&speech);
-    }
-    let gain = jb.get_auto_gain();
-    assert!(
-        gain > 1.0,
-        "quiet speech must be boosted above unity (was {gain})"
-    );
-    assert!(
-        gain <= MAX_AUTO_GAIN,
-        "gain must respect MAX_AUTO_GAIN ceiling"
-    );
 }
 
 #[test]

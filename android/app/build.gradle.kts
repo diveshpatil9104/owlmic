@@ -32,7 +32,7 @@ android {
         compose = true
     }
 
-    // libopus and the JNI wrapper. Needs CMake and the submodule (see docs/DEVELOPER_PLAYBOOKS_AND_SKILLS.md).
+    // libopus and the JNI wrapper. Needs CMake and the opus submodule (git submodule update --init).
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -46,9 +46,6 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.camera.core)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
 
     testImplementation(libs.junit)
 }

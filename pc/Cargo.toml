@@ -2,28 +2,18 @@
 name = "owlmic"
 version = "0.1.0"
 edition = "2021"
-description = "Turn your phone into a microphone and webcam for your PC over USB, Wi-Fi, or Bluetooth"
+description = "Your Android phone as your Windows PC's microphone, camera and speaker"
 license = "MIT"
 repository = "https://github.com/diveshpatil9104/owlmic"
 readme = "../README.md"
-keywords = ["webcam", "microphone", "streaming", "virtual-camera", "audio"]
+keywords = ["webcam", "microphone", "speaker", "virtual-camera", "windows"]
 categories = ["multimedia::audio", "multimedia::video"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-toml = "0.8"
-cpal = "0.15"
-opus-decoder = "0.1"
-zune-jpeg = "0.5"
-minifb = "0.28"
 nnnoiseless = { version = "0.5", default-features = false }
 
-[target.'cfg(windows)'.dependencies]
-tray-icon = "0.19"
-
-# Unoptimized, JPEG decoding, noise suppression and Opus run about 20 times slower and the
-# camera and mic stutter, so even `cargo run` optimizes them. Ship release builds all the same.
+# Unoptimized, noise suppression and resampling run about 20 times slower and the mic
+# stutters, so even `cargo run` optimizes them. Ship release builds all the same.
 [profile.dev]
 opt-level = 1
 

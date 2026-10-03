@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.Build
 
-/** Keeps Wi-Fi out of power save while we stream over it, so latency doesn't spike (connection-levels.md, Level 3). */
+/** Keeps Wi-Fi out of power save while we stream over it, so latency doesn't spike. */
 class WifiLatencyLock(context: Context) {
     private val lock = context.getSystemService(WifiManager::class.java)?.createWifiLock(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

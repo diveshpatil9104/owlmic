@@ -45,9 +45,9 @@ body:
       description: Which part of Owlmic is affected?
       options:
         - Android app
-        - PC app (Windows)
-        - PC app (Linux)
-        - Wire protocol
+        - Windows app
+        - Installer
+        - Protocol
         - Build / CI
         - Documentation
         - Other
@@ -57,14 +57,14 @@ body:
   - type: dropdown
     id: connection-level
     attributes:
-      label: Connection level (if applicable)
-      description: Which transport was active when the bug occurred?
+      label: Link (if applicable)
+      description: How were the phone and PC connected when it happened?
       options:
         - N/A
-        - Level 1 - USB Debugging (ADB)
-        - Level 2 - USB Tethering
-        - Level 3 - Wi-Fi / LAN
-        - Level 4 - Bluetooth
+        - USB debugging
+        - USB tethering
+        - Wi-Fi
+        - Bluetooth
 
   - type: textarea
     id: environment
@@ -73,7 +73,7 @@ body:
       description: Your setup details.
       placeholder: |
         - Phone: Pixel 7, Android 14
-        - PC OS: Windows 11 23H2 / Ubuntu 24.04
+        - PC: Windows 11 24H2
         - Owlmic version: v0.x.x or commit hash
         - Connection: Wi-Fi (same network)
     validations:

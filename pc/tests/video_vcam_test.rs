@@ -1,6 +1,8 @@
 #![cfg(windows)]
+#![cfg(windows)]
 
 #[test]
+#[ignore = "registers the real softcam camera; run with --ignored"]
 fn test_softcam_dll_registration() {
     #[link(name = "kernel32")]
     extern "system" {
@@ -85,8 +87,8 @@ fn test_softcam_dll_registration() {
     assert_eq!(reg_hr, 0, "DllRegisterServer should return S_OK (0)");
 }
 
-#[cfg(windows)]
 #[test]
+#[ignore = "registers the real softcam camera; run with --ignored"]
 fn test_directshow_device_enumeration() {
     #[link(name = "ole32")]
     extern "system" {
@@ -198,6 +200,7 @@ fn test_directshow_device_enumeration() {
 }
 
 #[test]
+#[ignore = "registers the real softcam camera; run with --ignored"]
 fn test_camera_off_frame_readiness() {
     let vcam = owlmic::video::vcam::VirtualCamera::new();
     vcam.show_off_frame();

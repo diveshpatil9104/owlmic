@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        We'd love to hear your ideas. Before submitting, please check existing issues
-        and the [roadmap](../docs/ROADMAP_AND_TEST_MATRIX.md) to see if it's already planned.
+        We'd love to hear your ideas. Before submitting, please check the existing issues
+        to see if it's already planned.
 
   - type: textarea
     id: problem
@@ -37,9 +37,9 @@ body:
       label: Component
       options:
         - Android app
-        - PC app (Windows)
-        - PC app (Linux)
-        - Wire protocol
+        - Windows app
+        - Installer
+        - Protocol
         - Build / CI
         - Documentation
         - Other

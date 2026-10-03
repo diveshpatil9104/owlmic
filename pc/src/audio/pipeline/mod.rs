@@ -1,6 +1,5 @@
 mod constants;
 mod controls;
-mod normalizer;
 mod resample;
 #[cfg(test)]
 mod tests;
@@ -8,7 +7,6 @@ mod tests;
 pub use constants::*;
 
 use crate::audio::dsp::AudioDsp;
-use normalizer::AudioNormalizer;
 use resample::{JitterStats, Playout};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
@@ -20,7 +18,6 @@ pub struct JitterBuffer {
     base_target_samples: AtomicUsize,
     adaptive_target_samples: AtomicUsize,
     peak_level: AtomicUsize,
-    normalizer: AudioNormalizer,
     ns_strength: AtomicUsize,
     ns_enabled: AtomicBool,
     dsp: Mutex<AudioDsp>,
@@ -37,7 +34,6 @@ impl JitterBuffer {
             base_target_samples: AtomicUsize::new(base_target),
             adaptive_target_samples: AtomicUsize::new(base_target),
             peak_level: AtomicUsize::new(0),
-            normalizer: AudioNormalizer::new(),
             ns_strength: AtomicUsize::new(100),
             ns_enabled: AtomicBool::new(true),
             dsp: Mutex::new(AudioDsp::new()),
@@ -45,10 +41,6 @@ impl JitterBuffer {
             playout: Mutex::new(Playout::new()),
             output_rate: AtomicU32::new(SAMPLE_RATE),
         }
-    }
-
-    pub fn get_auto_gain(&self) -> f32 {
-        self.normalizer.get_gain()
     }
 
     pub fn set_ns_strength(&self, pct: u32) {
@@ -105,9 +97,7 @@ impl JitterBuffer {
             dsp.process(&mut processed, ns);
         }
 
-        self.normalizer.update(&processed);
-        let gain = self.get_auto_gain();
-        resample::update_peak_level(&self.peak_level, &processed, gain);
+        resample::update_peak_level(&self.peak_level, &processed);
 
         if let Ok(mut buf) = self.buffer.lock() {
             buf.extend(processed.iter().copied());
@@ -125,7 +115,6 @@ impl JitterBuffer {
         if let Ok(mut playout) = self.playout.lock() {
             *playout = Playout::new();
         }
-        self.normalizer.reset();
         if let Ok(mut dsp) = self.dsp.lock() {
             dsp.reset();
         }

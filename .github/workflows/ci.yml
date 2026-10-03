@@ -12,12 +12,8 @@ concurrency:
 
 jobs:
   pc-checks:
-    name: PC (Rust) — ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
+    name: PC (Rust) on Windows
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -39,12 +35,7 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('pc/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
 
-      - name: Install ALSA dev headers (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-
-      - name: Ensure softcam.dll (Windows)
-        if: runner.os == 'Windows'
+      - name: Ensure softcam.dll
         shell: pwsh
         run: |
           if (-not (Test-Path "pc\softcam.dll")) {
@@ -61,7 +52,7 @@ jobs:
         run: cargo fmt --check --manifest-path pc/Cargo.toml
 
       - name: Clippy
-        run: cargo clippy --manifest-path pc/Cargo.toml -- -D warnings
+        run: cargo clippy --manifest-path pc/Cargo.toml --all-targets -- -D warnings
 
       - name: Tests
         run: cargo test --manifest-path pc/Cargo.toml

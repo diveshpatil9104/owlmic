@@ -27,8 +27,8 @@ The following are in scope for security reports:
 
 | Component | Examples |
 |-----------|---------|
-| Wire protocol | Frame injection, buffer overflows, malformed packet handling |
-| Session/trust | Token leakage, authentication bypass, unauthorized device access |
+| Protocol | Frame injection, buffer overflows, malformed packet handling |
+| Pairing | Key leakage, authentication bypass, unauthorized device access |
 | PC binary | Privilege escalation, arbitrary code execution, DLL injection |
 | Android app | Permission bypass, data leakage, intent hijacking |
 | Network | Discovery beacon spoofing, man-in-the-middle on local network |
@@ -42,12 +42,10 @@ The following are in scope for security reports:
 
 ## Security Design
 
-Owlmic's security model is documented in [`docs/SESSIONS_AND_TRUST.md`](../docs/SESSIONS_AND_TRUST.md). Key properties:
-
-- **Local-only:** All traffic stays on the direct link between your phone and PC. No cloud relay, no internet-facing server.
-- **Trust-on-first-use:** New devices require explicit approval on the PC. Trust is stored as a random 32-byte pairing token.
-- **No persistent identifiers:** No tracking, no analytics, no telemetry.
-- **Mic/camera default off:** Capture never starts without explicit user action.
+- **Local only:** traffic stays on the cable or the local network between your phone and PC. No cloud relay, no internet-facing server.
+- **Approve once:** a new phone must be approved on the PC before it can connect.
+- **No tracking:** no accounts, analytics, telemetry or logs.
+- **Off by default:** the mic, camera and speaker start only when you turn them on.
 
 ## Supported Versions
 

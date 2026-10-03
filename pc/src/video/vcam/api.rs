@@ -16,7 +16,6 @@ pub struct SoftcamApi {
     pub is_connected: FnIsConnected,
 }
 
-#[cfg(windows)]
 impl SoftcamApi {
     pub fn load() -> Option<Self> {
         #[link(name = "kernel32")]
@@ -80,12 +79,5 @@ impl SoftcamApi {
             delete_camera,
             is_connected,
         }
-    }
-}
-
-#[cfg(not(windows))]
-impl SoftcamApi {
-    pub fn load() -> Option<Self> {
-        None
     }
 }

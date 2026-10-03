@@ -1,30 +1,14 @@
-use zune_jpeg::zune_core::bytestream::ZCursor;
-use zune_jpeg::zune_core::colorspace::ColorSpace;
-use zune_jpeg::zune_core::options::DecoderOptions;
-use zune_jpeg::JpegDecoder;
-
-/// A decoded frame in BGR order, 3 bytes per pixel: what softcam and GDI take as is.
+/// A frame in BGR order, 3 bytes per pixel: what softcam takes as is.
 #[derive(Debug, Clone)]
-pub struct DecodedFrame {
+pub struct Frame {
     pub width: usize,
     pub height: usize,
     pub bgr: Vec<u8>,
 }
 
-impl DecodedFrame {
+impl Frame {
     pub fn new(width: usize, height: usize, bgr: Vec<u8>) -> Self {
         Self { width, height, bgr }
-    }
-
-    /// Fills `out` with 0x00RRGGBB pixels for the preview window, reusing its memory.
-    pub fn fill_rgb32(&self, out: &mut Vec<u32>) {
-        out.clear();
-        let (chunks, _) = self.bgr.as_chunks::<3>();
-        out.extend(
-            chunks
-                .iter()
-                .map(|p| (p[2] as u32) << 16 | (p[1] as u32) << 8 | p[0] as u32),
-        );
     }
 
     /// Scales this frame to fit `dst_w` x `dst_h` into `out`, keeping its shape, with black bars
@@ -115,7 +99,7 @@ impl DecodedFrame {
             }
         }
 
-        DecodedFrame { width, height, bgr }
+        Frame { width, height, bgr }
     }
 }
 
@@ -127,49 +111,17 @@ fn sample_at(d: usize, dst_len: usize, src_len: usize) -> (usize, u32) {
     (i, ((pos - i as f32) * 256.0) as u32)
 }
 
-/// Decodes a JPEG payload straight to BGR, into `buf` when it's big enough, so a steady stream
-/// of frames allocates nothing.
-pub fn decode_jpeg(jpeg_bytes: &[u8], mut buf: Vec<u8>) -> Result<DecodedFrame, String> {
-    if jpeg_bytes.is_empty() {
-        return Err("empty JPEG payload".to_string());
-    }
-
-    let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::BGR);
-    let mut decoder = JpegDecoder::new_with_options(ZCursor::new(jpeg_bytes), options);
-    decoder
-        .decode_headers()
-        .map_err(|e| format!("JPEG decode error: {:?}", e))?;
-    let (width, height) = decoder
-        .dimensions()
-        .ok_or_else(|| "missing JPEG dimensions".to_string())?;
-    // softcam and GDI read exactly width * height * 3 bytes; a grayscale JPEG would come out short.
-    let size = width * height * 3;
-    if decoder.output_buffer_size() != Some(size) {
-        return Err("JPEG is not a color image".to_string());
-    }
-    buf.resize(size, 0);
-    decoder
-        .decode_into(&mut buf)
-        .map_err(|e| format!("JPEG decode error: {:?}", e))?;
-
-    Ok(DecodedFrame {
-        width,
-        height,
-        bgr: buf,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn solid(width: usize, height: usize, value: u8) -> DecodedFrame {
-        DecodedFrame::new(width, height, vec![value; width * height * 3])
+    fn solid(width: usize, height: usize, value: u8) -> Frame {
+        Frame::new(width, height, vec![value; width * height * 3])
     }
 
     #[test]
     fn test_letterbox_same_size_is_unchanged() {
-        let frame = DecodedFrame::new(4, 2, (0..24).collect());
+        let frame = Frame::new(4, 2, (0..24).collect());
         let mut out = Vec::new();
         frame.letterbox_into(4, 2, &mut out);
         assert_eq!(out, frame.bgr);
@@ -204,7 +156,7 @@ mod tests {
     #[test]
     fn test_letterbox_upscale_is_smooth() {
         // Nearest-pixel scaling turned [0, 255] into [0, 0, 255, 255]; blending gives steps between.
-        let frame = DecodedFrame::new(2, 1, vec![0, 0, 0, 255, 255, 255]);
+        let frame = Frame::new(2, 1, vec![0, 0, 0, 255, 255, 255]);
         let mut out = Vec::new();
         frame.letterbox_into(4, 2, &mut out);
         let row: Vec<u8> = out[..12].chunks(3).map(|p| p[0]).collect();

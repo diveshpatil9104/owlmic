@@ -1,7 +1,7 @@
 # Owlmic microphone setup: installs the virtual microphone driver if it's missing, names it "Owlmic",
 # and leaves the user's own default speakers and microphone exactly as they were.
 #
-# Run by the installer (-Silent) and by the panel's Setup Mic button. Needs administrator rights.
+# Run by the installer (-Silent). Needs administrator rights.
 # The driver files come from -DriverDir, by default the "driver" folder next to this script.
 # Exit codes: 0 ready, 3010 ready after Windows restarts, 1 failed.
 
@@ -39,7 +39,6 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 # The Owlmic microphone runs on this virtual cable driver. Its device and endpoint names as Windows reports them.
 $DriverDevice = "VB-Audio Virtual Cable"
 $OwlmicAudio = "Owlmic Audio"
-$OldAudio = "Owlmic Audio"   # the name from before the rename to Owlmic, so setup renames it
 $EndpointName = "{a45c254e-df1c-4efd-8020-67d146a850e0},2"   # PKEY_Device_DeviceDesc: "CABLE Output"
 $AdapterName  = "{b3f8fa53-0004-438e-9003-51a46e139bfc},6"   # PKEY_DeviceInterface_FriendlyName: the part in brackets
 
@@ -197,7 +196,7 @@ function Rename-Endpoints([string]$flow, [string]$name) {
     Get-ChildItem -Path $root -ErrorAction SilentlyContinue | ForEach-Object {
         $props = Join-Path $_.PSPath "Properties"
         $values = Get-ItemProperty -Path $props -ErrorAction SilentlyContinue
-        if ($values -and ($values.$AdapterName -in @($DriverDevice, $OwlmicAudio, $OldAudio))) {
+        if ($values -and ($values.$AdapterName -in @($DriverDevice, $OwlmicAudio))) {
             Set-ItemProperty -Path $props -Name $EndpointName -Value $name -ErrorAction SilentlyContinue
             Set-ItemProperty -Path $props -Name $AdapterName -Value $OwlmicAudio -ErrorAction SilentlyContinue
             $check = Get-ItemProperty -Path $props -ErrorAction SilentlyContinue
@@ -239,7 +238,7 @@ try {
 if ($mics -eq 0) {
     Restore-Defaults
     if ($restartNeeded) {
-        Say "The Owlmic microphone is installed. Restart Windows, then click Setup Mic in Owlmic's panel to finish." "Yellow"
+        Say "The Owlmic microphone is installed. Restart Windows, then run the Owlmic installer again to finish." "Yellow"
         Finish 3010
     }
     Say "The Owlmic microphone driver is installed, but Windows hasn't created the microphone yet. Restart Windows and try again." "Yellow"

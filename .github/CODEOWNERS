@@ -7,11 +7,8 @@
 # Android app
 android/                   @diveshpatil9104
 
-# PC tray app
+# Windows app
 pc/                        @diveshpatil9104
-
-# Documentation and specs
-docs/                      @diveshpatil9104
 
 # CI and community governance
 .github/                   @diveshpatil9104

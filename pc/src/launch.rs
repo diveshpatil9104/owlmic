@@ -1,12 +1,9 @@
 //! Keeps Windows' busy pointer (the arrow with a spinning ring) away: Windows shows it while a
 //! desktop program starts, until that program first waits for input.
 
-#[cfg(windows)]
 use std::ffi::c_void;
-#[cfg(windows)]
 use std::io;
 
-#[cfg(windows)]
 #[repr(C)]
 pub(crate) struct Msg {
     hwnd: usize,
@@ -17,7 +14,6 @@ pub(crate) struct Msg {
     pt: [i32; 2],
 }
 
-#[cfg(windows)]
 #[repr(C)]
 struct StartupInfoW {
     cb: u32,
@@ -32,7 +28,6 @@ struct StartupInfoW {
     std_handles: [usize; 3],
 }
 
-#[cfg(windows)]
 #[repr(C)]
 struct ProcessInformation {
     process: usize,
@@ -41,7 +36,6 @@ struct ProcessInformation {
     thread_id: u32,
 }
 
-#[cfg(windows)]
 #[link(name = "user32")]
 extern "system" {
     pub(crate) fn PeekMessageW(msg: *mut Msg, hwnd: usize, min: u32, max: u32, remove: u32) -> i32;
@@ -49,7 +43,6 @@ extern "system" {
     fn PostThreadMessageW(thread_id: u32, msg: u32, wparam: usize, lparam: isize) -> i32;
 }
 
-#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn GetCurrentThreadId() -> u32;
@@ -71,7 +64,6 @@ extern "system" {
 /// Ends Owlmic's own busy pointer at once, instead of after startup. An empty PeekMessage is
 /// where Windows counts a program as waiting for input, and the docs name the first GetMessage,
 /// so this does both; a message is posted first so GetMessage never blocks.
-#[cfg(windows)]
 pub fn end_busy_pointer() {
     const PM_NOREMOVE: u32 = 0;
     const WM_NULL: u32 = 0;
@@ -85,7 +77,6 @@ pub fn end_busy_pointer() {
 }
 
 /// Starts a program, like Explorer on a folder, without the busy pointer.
-#[cfg(windows)]
 pub fn start(program: &str, args: &[&str]) -> io::Result<()> {
     const STARTF_FORCEOFFFEEDBACK: u32 = 0x80;
     let mut line: Vec<u16> = command_line(program, args)
@@ -120,7 +111,6 @@ pub fn start(program: &str, args: &[&str]) -> io::Result<()> {
 
 /// Quotes every part the way Windows programs split their command line: backslashes are only
 /// special before a quote, so those get doubled.
-#[cfg(any(windows, test))]
 fn command_line(program: &str, args: &[&str]) -> String {
     let mut line = String::new();
     for part in std::iter::once(program).chain(args.iter().copied()) {

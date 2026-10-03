@@ -67,7 +67,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Owlmic"; Flags: dontcreatekey uninsdeletevalue
 
 [Run]
-; Rules the app added before the rename to Owlmic.
+; Owlmic's rules from an earlier install, so reinstalling or upgrading doesn't add them twice.
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic TCP"""; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic UDP Beacon"""; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic"""; Flags: runhidden
@@ -103,7 +103,7 @@ begin
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and ((ResultCode = 0) or (ResultCode = 3010)) then
       MicNeedsRestart := ResultCode = 3010
     else
-      SuppressibleMsgBox('Owlmic is installed, but its microphone couldn''t be set up yet. Restart Windows, open Owlmic, and click Setup Mic in its panel.',
+      SuppressibleMsgBox('Owlmic is installed, but its microphone couldn''t be set up yet. Restart Windows, then run the Owlmic installer again.',
         mbInformation, MB_OK, IDOK);
   finally
     WizardForm.ProgressGauge.Style := npbstNormal;
