@@ -1,0 +1,18 @@
+{
+  "settings": [
+    { "id": "mic.noiseReduction", "values": ["phone", "phoneAndPc", "off"], "default": "phone", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "mic.boost", "values": ["off", "plus6", "plus12"], "default": "off", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "camera.lens", "values": ["back", "front"], "default": "back", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "camera.quality", "values": ["auto", "720p", "1080p"], "default": "auto", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "camera.frameRate", "values": ["24", "30", "60"], "default": "24", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "camera.orientation", "values": ["auto", "landscape", "portrait"], "default": "auto", "scope": "shared", "shownOn": ["phone"] },
+    { "id": "camera.framing", "values": ["fill", "fit"], "default": "fill", "scope": "pc", "shownOn": ["pc"] },
+    { "id": "camera.mirror", "values": ["off", "on"], "default": "off", "scope": "pc", "shownOn": ["pc"] },
+    { "id": "speaker.quietPc", "values": ["on", "off"], "default": "on", "scope": "pc", "shownOn": ["pc"] },
+    { "id": "link.usbDebugging", "values": ["on", "off"], "default": "on", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "link.usbTethering", "values": ["on", "off"], "default": "on", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "link.wifi", "values": ["on", "off"], "default": "on", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "link.bluetooth", "values": ["on", "off"], "default": "on", "scope": "shared", "shownOn": ["phone", "pc"] },
+    { "id": "general.startWithWindows", "values": ["on", "off"], "default": "on", "scope": "pc", "shownOn": ["pc"] }
+  ]
+}

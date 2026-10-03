@@ -1,0 +1,14 @@
+[package]
+name = "owlmic-session"
+description = "The Session Hub: pairings, the approve gate, the one-phone rule and session state"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+owlmic-hub.workspace = true
+owlmic-proto.workspace = true
+owlmic-settings.workspace = true
+base64.workspace = true

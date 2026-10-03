@@ -1,0 +1,662 @@
+package com.owlmic.core.link
+
+import com.owlmic.core.hub.Connection
+import com.owlmic.core.hub.Hub
+import com.owlmic.core.hub.LinkKind
+import com.owlmic.core.hub.PcChoice
+import com.owlmic.core.hub.SearchStage
+import com.owlmic.core.proto.Bye
+import com.owlmic.core.proto.Crypto
+import com.owlmic.core.proto.Frames
+import com.owlmic.core.proto.KeyframeRequest
+import com.owlmic.core.proto.Message
+import com.owlmic.core.proto.Ping
+import com.owlmic.core.proto.Pong
+import com.owlmic.core.proto.Proto
+import com.owlmic.core.proto.RejectReason
+import com.owlmic.core.proto.Report
+import com.owlmic.core.proto.RestartStream
+import com.owlmic.core.proto.Settings
+import com.owlmic.core.proto.State
+import com.owlmic.core.proto.Stream
+import com.owlmic.core.proto.StreamStart
+import com.owlmic.core.proto.StreamStop
+import com.owlmic.core.proto.Switch
+import com.owlmic.core.settings.Store
+import com.owlmic.core.toHex
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
+import kotlin.concurrent.thread
+
+sealed interface LinkMsg {
+    class Found(val candidate: Candidate) : LinkMsg
+
+    data object Tick : LinkMsg
+
+    class AttemptPending(val attempt: Int, val pc: String, val code: String) : LinkMsg
+
+    class AttemptDone(val attempt: Int, val result: Handshake.Result, val session: LinkSession?) : LinkMsg
+
+    class ControlIn(val session: LinkSession, val message: Message) : LinkMsg
+
+    class Closed(val session: LinkSession) : LinkMsg
+
+    class MediaRecreated(val session: LinkSession, val path: MediaPath) : LinkMsg
+
+    class Send(val message: Message) : LinkMsg
+
+    class Choose(val pcId: String) : LinkMsg
+
+    data object AskAgain : LinkMsg
+
+    class Forget(val pcId: String) : LinkMsg
+
+    class Allowed(val links: Set<LinkKind>) : LinkMsg
+
+    /** The app came to the screen: look right away. */
+    data object Opened : LinkMsg
+
+    class SpeakerExpected(val on: Boolean) : LinkMsg
+
+    /** The user granted Bluetooth after "Try Bluetooth". */
+    data object TryBluetooth : LinkMsg
+}
+
+sealed interface LinkEvent {
+    class ConnectionChanged(val connection: Connection) : LinkEvent
+
+    class Choices(val pcs: List<PcChoice>) : LinkEvent
+
+    class BluetoothOffer(val show: Boolean) : LinkEvent
+
+    class Welcomed(val pcId: String, val pcName: String, val link: LinkKind, val settings: Map<String, String>, val resumed: Boolean) : LinkEvent
+
+    class Switched(val link: LinkKind) : LinkEvent
+
+    /** A control message for the rest of the app: STATE, SETTINGS, STREAM_START, STREAM_STOP, KEYFRAME_REQUEST, REPORT. */
+    class Control(val message: Message) : LinkEvent
+
+    /** The link dropped: the session is held for 30 s. */
+    data object Held : LinkEvent
+
+    /** 30 s without the PC: let go of the mic and camera, keep looking. */
+    data object Release : LinkEvent
+
+    /** 5 minutes without the PC, or it was forgotten: everything off. */
+    data object Ended : LinkEvent
+
+    /** First step of the recovery ladder: restart [stream] at its source. */
+    class RestartSource(val stream: Int) : LinkEvent
+
+    data object KnownChanged : LinkEvent
+}
+
+/**
+ * The Transporter (section 14): finds PCs, runs handshakes, keeps the active link and a warm standby, follows the PC's
+ * SWITCH, recovers stalls and holds the session through drops (section 7.6). Every decision happens here, on the hub
+ * dispatcher; sockets live on the attempt and session threads.
+ */
+class LinkHub(
+    private val store: Store,
+    private val router: MediaRouter,
+    private val bluetooth: Bluetooth?,
+    private val phoneName: () -> String,
+    private val model: String,
+    private val sdk: Int,
+    private val thermal: () -> Int?,
+    private val emit: (LinkEvent) -> Unit,
+    private val now: () -> Long = System::currentTimeMillis,
+) : Hub<LinkMsg>("link") {
+    private enum class Phase { SEARCHING, CONNECTING, APPROVING, ACTIVE, HELD, WAITING, DENIED, BUSY, UPDATE }
+
+    private enum class Purpose { PRIMARY, STANDBY }
+
+    private class Attempt(val id: Int, val candidate: Candidate, val purpose: Purpose, val resume: String?)
+
+    private var phase = Phase.SEARCHING
+    private var phaseSince = now()
+    private var searchStartedAt = now()
+    private var heldAt = 0L
+    private var connection: Connection? = null
+    private val seeker = Seeker(store.phoneId, phoneName, store::addresses) { post(LinkMsg.Found(it)) }
+    private val candidates = LinkedHashMap<String, Pair<Candidate, Long>>()
+    private val failures = HashMap<String, Pair<Int, Long>>()
+    private var attempt: Attempt? = null
+    private var attemptIds = 0
+    private var active: LinkSession? = null
+    private var standby: LinkSession? = null
+    private var pcId: String? = null
+    private var pcName = ""
+    private var heldSessionId: String? = null
+    private var deniedPc: String? = null
+    private var allowed: Set<LinkKind> = LinkKind.entries.toSet()
+    private var bluetoothTried = false
+    private var bluetoothOffered = false
+    private var speakerSince = 0L
+    private var lastPing = 0L
+    private var lastStandbyPing = 0L
+    private val reconnector = Reconnector(now)
+
+    init {
+        scope.launch {
+            while (isActive) {
+                delay(TICK_MS)
+                post(LinkMsg.Tick)
+            }
+        }
+        setConnection(Connection.Searching())
+    }
+
+    override fun handle(message: LinkMsg) {
+        when (message) {
+            is LinkMsg.Found -> found(message.candidate)
+            LinkMsg.Tick -> tick()
+            is LinkMsg.AttemptPending -> if (attempt?.id == message.attempt && attempt?.purpose == Purpose.PRIMARY) {
+                phase = Phase.APPROVING
+                setConnection(Connection.Approving(message.pc, message.code, attempt!!.candidate.link))
+            }
+            is LinkMsg.AttemptDone -> attemptDone(message)
+            is LinkMsg.ControlIn -> control(message.session, message.message)
+            is LinkMsg.Closed -> closed(message.session)
+            is LinkMsg.MediaRecreated -> if (message.session === active && !message.session.closed) {
+                val old = message.session.path
+                message.session.path = message.path
+                router.use(message.path)
+                runCatching { old.carrier.close() }
+            } else {
+                runCatching { message.path.carrier.close() }
+            }
+            is LinkMsg.Send -> active?.send(message.message)
+            is LinkMsg.Choose -> fresh().firstOrNull { it.pcId == message.pcId }?.let { connect(it, Purpose.PRIMARY, null) }
+            LinkMsg.AskAgain -> deniedPc?.let {
+                store.clearRefusal(it)
+                deniedPc = null
+                searching()
+                decide()
+            }
+            is LinkMsg.Forget -> forget(message.pcId)
+            is LinkMsg.Allowed -> {
+                allowed = message.links
+                candidates.entries.removeAll { (_, v) -> (v.first.link !in allowed).also { gone -> if (gone) drop(v.first) } }
+                active?.takeIf { it.link !in allowed }?.close()
+                standby?.takeIf { it.link !in allowed }?.close()
+            }
+            LinkMsg.Opened -> seeker.burst()
+            is LinkMsg.SpeakerExpected -> speakerSince = if (message.on) now() else 0
+            LinkMsg.TryBluetooth -> {
+                bluetoothTried = true
+                offerBluetooth(false)
+                decide()
+            }
+        }
+    }
+
+    private fun key(c: Candidate) = "${c.pcId ?: "tunnel"}:${c.link}:${c.host?.hostAddress ?: c.btAddress ?: ""}"
+
+    private fun found(c: Candidate) {
+        if (c.link !in allowed) {
+            drop(c)
+            return
+        }
+        val k = key(c)
+        candidates.put(k, c to now())?.first?.takeIf { it.opened !== c.opened }?.let(::drop)
+        when (phase) {
+            Phase.SEARCHING, Phase.HELD, Phase.WAITING, Phase.BUSY -> decide()
+            Phase.ACTIVE -> upgrade()
+            else -> Unit
+        }
+    }
+
+    /** An unused tunnel connection from the Seeker is closed, and the Seeker may dial again. */
+    private fun drop(c: Candidate) {
+        val opened = c.opened ?: return
+        runCatching { opened.close() }
+        seeker.tunnelReleased()
+    }
+
+    private fun fresh(): List<Candidate> {
+        val t = now()
+        return candidates.values.filter { (c, seen) ->
+            t - seen <= CANDIDATE_TTL_MS && c.link in allowed && (failures[key(c)]?.second ?: 0) <= t
+        }.map { it.first }
+    }
+
+    private fun decide() {
+        if (attempt != null) return
+        var options = fresh()
+        if (options.none { it.link != LinkKind.BLUETOOTH } && bluetoothUsable()) {
+            val known = store.known()
+            options = options + bluetooth!!.candidates(store.btAddresses()).map { c ->
+                val pc = known.values.firstOrNull { store.pc(it.id)?.btAddress == c.btAddress?.uppercase() }
+                if (pc != null) c.copy(pcId = pc.id, name = pc.name) else c
+            }
+        }
+        // While holding, only the held PC (or the cable, which is its own proof of intent) will do.
+        if (phase == Phase.HELD || phase == Phase.WAITING) options = options.filter { it.pcId == pcId || it.pcId == null }
+        when (val d = Ranker.decide(options, store.known(), now())) {
+            is Decision.Connect -> {
+                val resume = heldSessionId?.takeIf { d.candidate.pcId == pcId || d.candidate.pcId == null }
+                connect(d.candidate, Purpose.PRIMARY, resume)
+            }
+            is Decision.Choose -> if (phase == Phase.SEARCHING) {
+                emit(LinkEvent.Choices(d.candidates.mapNotNull { c -> c.pcId?.let { PcChoice(it, c.name) } }))
+                setConnection(Connection.Choosing(d.candidates.size))
+            }
+            Decision.Wait -> Unit
+        }
+    }
+
+    private fun bluetoothUsable(): Boolean {
+        val b = bluetooth ?: return false
+        if (LinkKind.BLUETOOTH !in allowed || !b.permitted()) return false
+        return bluetoothTried || now() - searchStartedAt >= BLUETOOTH_AFTER_MS || phase == Phase.HELD || phase == Phase.WAITING
+    }
+
+    private fun connect(c: Candidate, purpose: Purpose, resume: String?) {
+        val a = Attempt(++attemptIds, c, purpose, resume)
+        attempt = a
+        // A tunnel connection the Seeker handed over now belongs to this attempt; expiring the candidate must not close it.
+        if (c.opened != null) candidates.remove(key(c))
+        if (purpose == Purpose.PRIMARY) {
+            if (phase != Phase.HELD && phase != Phase.WAITING) {
+                phase = Phase.CONNECTING
+                setConnection(Connection.Connecting(c.name.ifEmpty { null }, c.link))
+            }
+        }
+        thread(name = "owlmic-connect", isDaemon = true) { run(a) }
+    }
+
+    /** On the attempt's own thread: dial, handshake, open the media carrier. */
+    private fun run(a: Attempt) {
+        val c = a.candidate
+        var channel: ControlChannel? = null
+        var session: LinkSession? = null
+        val result = try {
+            channel = when (c.link) {
+                LinkKind.USB_DEBUGGING -> tcp((c.opened as? Socket) ?: dial(InetAddress.getLoopbackAddress(), Proto.PORT_CONTROL))
+                LinkKind.USB_TETHERING, LinkKind.WIFI -> tcp(dial(c.host ?: error("no address"), c.tcpPort))
+                LinkKind.BLUETOOTH -> bluetooth!!.connect(c.btAddress ?: error("no address")).let { s -> ControlChannel(s.inputStream, s.outputStream, s) }
+            }
+            val hs = Handshake(store.identity, store.phoneId, phoneName(), model, store::key)
+            val r = hs.run(channel, c.link, a.resume, Watchdog.on(channel)) { pc, code -> post(LinkMsg.AttemptPending(a.id, pc, code)) }
+            if (r is Handshake.Result.Welcomed) session = open(c, channel, r)
+            r
+        } catch (e: Exception) {
+            Handshake.Result.Failed(e.message ?: e.javaClass.simpleName)
+        }
+        if (session == null) channel?.close()
+        post(LinkMsg.AttemptDone(a.id, result, session))
+    }
+
+    private fun dial(host: InetAddress, port: Int) = Socket().apply {
+        tcpNoDelay = true
+        connect(InetSocketAddress(host, port), DIAL_MS)
+    }
+
+    private fun tcp(socket: Socket) = ControlChannel(socket.getInputStream(), socket.getOutputStream(), socket).also {
+        it.writeChannelByte(Frames.CHANNEL_CONTROL)
+    }
+
+    /** Opens the media carrier for a welcomed handshake and greets the PC on it (protocol section 6, stream 0). */
+    private fun open(c: Candidate, channel: ControlChannel, w: Handshake.Result.Welcomed): LinkSession {
+        val wireless = c.link.isWireless
+        if (wireless) channel.sealing = ControlSealing(w.keys.phoneToPc, w.keys.pcToPhone)
+        val path = newPath(c, channel, w, Packetizer(if (wireless) Crypto.Sealing(w.keys.phoneToPc) else null), Unpacker(if (wireless) Crypto.Sealing(w.keys.pcToPhone) else null))
+        return LinkSession(c, c.link, channel, w, path, c.hotspot)
+    }
+
+    private fun newPath(c: Candidate, channel: ControlChannel, w: Handshake.Result.Welcomed, out: Packetizer, inbound: Unpacker): MediaPath {
+        var holder: MediaPath? = null
+        val receive = { b: ByteArray, n: Int -> holder?.let { router.received(it, b, n) } ?: Unit }
+        val carrier = when (c.link) {
+            LinkKind.USB_DEBUGGING -> TunnelCarrier(Proto.PORT_CONTROL, receive) { holder?.let { p -> sessionOf(p)?.let { post(LinkMsg.Closed(it)) } } }
+            LinkKind.USB_TETHERING, LinkKind.WIFI -> UdpCarrier(c.host!!, c.mediaPort, receive)
+            LinkKind.BLUETOOTH -> SharedStreamCarrier(channel) { holder?.let { p -> sessionOf(p)?.let { post(LinkMsg.Closed(it)) } } }
+        }
+        val path = MediaPath(carrier, out, inbound)
+        holder = path
+        val hello = out.carrierHello(w.sessionId, Crypto.carrierMac(w.keys.auth, w.sessionId))
+        carrier.send(hello)
+        if (carrier is UdpCarrier) {
+            // UDP may drop one; a few copies cost nothing.
+            Thread.sleep(100)
+            carrier.send(hello)
+            Thread.sleep(200)
+            carrier.send(hello)
+        }
+        return path
+    }
+
+    private fun sessionOf(p: MediaPath) = listOfNotNull(active, standby).firstOrNull { it.path === p }
+
+    private fun attemptDone(m: LinkMsg.AttemptDone) {
+        val a = attempt
+        if (a == null || a.id != m.attempt) {
+            m.session?.close()
+            return
+        }
+        attempt = null
+        val c = a.candidate
+        when (val r = m.result) {
+            is Handshake.Result.Welcomed -> {
+                failures.remove(key(c))
+                val s = m.session!!
+                if (a.purpose == Purpose.PRIMARY) {
+                    store.remember(r.pcId, r.pcName, r.pcStaticPub, r.pairingKey, r.btAddr)
+                    val resumed = (phase == Phase.HELD || phase == Phase.WAITING) && r.pcId == pcId
+                    activate(s, resumed)
+                } else if (active != null && r.pcId == pcId && s.link != active!!.link) {
+                    standby?.close()
+                    standby = s
+                    startReading(s)
+                } else {
+                    s.close()
+                }
+            }
+            is Handshake.Result.Rejected -> {
+                if (c.link == LinkKind.USB_DEBUGGING) seeker.tunnelReleased()
+                if (a.purpose == Purpose.STANDBY) return
+                val name = r.pcName ?: c.name
+                when (r.reason) {
+                    RejectReason.DENIED, RejectReason.BLOCKED -> {
+                        r.pcId?.let { store.refused(it, name) }
+                        deniedPc = r.pcId
+                        phase = Phase.DENIED
+                        setConnection(Connection.Denied(name))
+                        emit(LinkEvent.KnownChanged)
+                    }
+                    RejectReason.BUSY -> {
+                        backoff(c, BUSY_RETRY_MS)
+                        phase = Phase.BUSY
+                        setConnection(Connection.Busy(name, r.owner.orEmpty()))
+                    }
+                    RejectReason.VERSION -> {
+                        phase = Phase.UPDATE
+                        setConnection(Connection.UpdateNeeded(if ((r.pcProto ?: 0) > Proto.VERSION) null else name))
+                    }
+                }
+            }
+            is Handshake.Result.Failed -> {
+                if (c.link == LinkKind.USB_DEBUGGING) seeker.tunnelReleased()
+                backoff(c, null)
+                if (a.purpose == Purpose.PRIMARY && phase != Phase.HELD && phase != Phase.WAITING) searching()
+            }
+        }
+    }
+
+    /** A failed candidate waits 0.5 s, then 1 s, then 2 s before it is tried again (section 14.5). */
+    private fun backoff(c: Candidate, fixedMs: Long?) {
+        val k = key(c)
+        val count = (failures[k]?.first ?: 0) + 1
+        val delay = fixedMs ?: RETRY_MS[minOf(count - 1, RETRY_MS.lastIndex)]
+        failures[k] = count to now() + delay
+    }
+
+    private fun activate(s: LinkSession, resumed: Boolean) {
+        val w = s.welcome
+        active = s
+        pcId = w.pcId
+        pcName = w.pcName
+        heldSessionId = null
+        deniedPc = null
+        phase = Phase.ACTIVE
+        phaseSince = now()
+        reconnector.recovered()
+        router.use(s.path)
+        startReading(s)
+        pace()
+        lastPing = 0
+        // Connected first: the App Hub answers Welcomed with STATE and STREAM_STARTs, which go out only while connected.
+        setConnection(Connection.Connected(w.pcName, s.link, s.hotspot))
+        emit(LinkEvent.Welcomed(w.pcId, w.pcName, s.link, w.settings, resumed))
+        emit(LinkEvent.Choices(emptyList()))
+        emit(LinkEvent.KnownChanged)
+        offerBluetooth(false)
+    }
+
+    private fun startReading(s: LinkSession) {
+        s.start(router, onControl = { post(LinkMsg.ControlIn(s, it)) }, onClosed = { post(LinkMsg.Closed(s)) })
+    }
+
+    private fun pace() {
+        seeker.pace = when (active?.link) {
+            null -> Seeker.Pace.SEARCHING
+            LinkKind.USB_DEBUGGING -> Seeker.Pace.CONNECTED_BY_USB_DEBUGGING
+            else -> Seeker.Pace.CONNECTED
+        }
+    }
+
+    private fun closed(s: LinkSession) {
+        s.close()
+        if (s.link == LinkKind.USB_DEBUGGING) seeker.tunnelReleased()
+        if (s === standby) {
+            standby = null
+            return
+        }
+        if (s !== active) return
+        active = null
+        val next = standby?.takeIf { !it.closed }
+        standby = null
+        if (next != null) {
+            promote(next)
+            return
+        }
+        router.use(null)
+        hold(s)
+    }
+
+    private fun promote(s: LinkSession) {
+        active = s
+        // Its last answer may be a standby heartbeat old; the active link's stricter deadline starts now.
+        s.monitor.heard()
+        router.use(s.path)
+        pace()
+        setConnection(Connection.Connected(pcName, s.link, s.hotspot))
+        emit(LinkEvent.Switched(s.link))
+    }
+
+    private fun hold(s: LinkSession) {
+        heldSessionId = s.sessionId.toHex()
+        phase = Phase.HELD
+        phaseSince = now()
+        heldAt = now()
+        pace()
+        seeker.burst()
+        emit(LinkEvent.Held)
+        setConnection(Connection.Reconnecting(pcName, s.link))
+    }
+
+    private fun control(s: LinkSession, m: Message) {
+        s.monitor.heard()
+        if (s !== active && s !== standby) return
+        when (m) {
+            is Ping -> s.send(Pong(m.t))
+            is Pong -> s.monitor.pong(m.t)
+            is Switch -> {
+                val target = LinkKind.of(m.link) ?: return
+                val next = standby?.takeIf { it.link == target && !it.closed } ?: return
+                if (s !== active) return
+                val old = active!!
+                standby = old.takeIf { it.link.isWireless && target.isCable }
+                if (standby == null) old.close()
+                promote(next)
+            }
+            is Bye -> s.close()
+            is RestartStream -> if (s === active) ladder(m.stream)
+            is State, is Settings, is StreamStart, is StreamStop, KeyframeRequest, is Report -> if (s === active) emit(LinkEvent.Control(m))
+            else -> Unit
+        }
+    }
+
+    /** One step of the recovery ladder for a stalled stream (section 14.8). */
+    private fun ladder(stream: Int) {
+        val s = active ?: return
+        when (reconnector.stall()) {
+            Reconnector.Step.RESTART_SOURCE -> {
+                emit(LinkEvent.RestartSource(stream))
+                if (stream == Stream.SPEAKER) s.send(RestartStream(stream))
+            }
+            Reconnector.Step.RECREATE_MEDIA -> recreateMedia(s)
+            Reconnector.Step.REHANDSHAKE, Reconnector.Step.SWITCH_LINK, Reconnector.Step.HOLD -> s.close()
+        }
+    }
+
+    private fun recreateMedia(s: LinkSession) {
+        thread(name = "owlmic-recreate", isDaemon = true) {
+            val path = runCatching { newPath(s.candidate, s.channel, s.welcome, s.path.out, s.path.inbound) }.getOrNull() ?: return@thread
+            post(LinkMsg.MediaRecreated(s, path))
+        }
+    }
+
+    private fun tick() {
+        val t = now()
+        candidates.entries.removeAll { (_, v) -> (t - v.second > CANDIDATE_TTL_MS).also { stale -> if (stale) drop(v.first) } }
+        when (phase) {
+            Phase.SEARCHING, Phase.BUSY, Phase.DENIED -> {
+                if (phase == Phase.SEARCHING && connection !is Connection.Choosing) {
+                    val elapsed = t - searchStartedAt
+                    setConnection(
+                        Connection.Searching(
+                            when {
+                                elapsed >= HELP_AFTER_MS -> SearchStage.HELP
+                                elapsed >= NOT_FOUND_AFTER_MS -> SearchStage.NOT_FOUND
+                                else -> SearchStage.SEARCHING
+                            },
+                        ),
+                    )
+                }
+                maybeOfferBluetooth(t)
+                decide()
+            }
+            Phase.HELD -> {
+                if (t - heldAt >= HOLD_MS) {
+                    phase = Phase.WAITING
+                    emit(LinkEvent.Release)
+                    setConnection(Connection.Waiting(pcName))
+                }
+                decide()
+            }
+            Phase.WAITING -> if (t - heldAt >= WAIT_MS) {
+                heldSessionId = null
+                emit(LinkEvent.Ended)
+                searching()
+            } else {
+                decide()
+            }
+            Phase.ACTIVE -> heartbeat(t)
+            Phase.CONNECTING, Phase.APPROVING, Phase.UPDATE -> Unit
+        }
+    }
+
+    private fun heartbeat(t: Long) {
+        val a = active ?: return
+        if (a.monitor.dead()) {
+            a.close()
+            return
+        }
+        if (t - lastPing >= Monitor.HEARTBEAT_MS) {
+            lastPing = t
+            a.send(Ping(Monitor.nowUs()))
+            a.monitor.report(router.speakerStats, thermal())?.let(a::send)
+        }
+        standby?.let { sb ->
+            if (sb.monitor.dead(Monitor.STANDBY_HEARTBEAT_MS)) {
+                sb.close()
+            } else if (t - lastStandbyPing >= Monitor.STANDBY_HEARTBEAT_MS) {
+                lastStandbyPing = t
+                sb.send(Ping(Monitor.nowUs()))
+            }
+        }
+        // The speaker stream must keep arriving while it is on.
+        if (speakerSince > 0 && t - speakerSince > SPEAKER_STALL_MS) {
+            val last = router.speakerStats.lastArrivalUs
+            if (last == 0L || Monitor.nowUs() - last > SPEAKER_STALL_MS * 1_000) {
+                speakerSince = t
+                ladder(Stream.SPEAKER)
+            }
+        }
+        upgrade()
+    }
+
+    /** Opens a better link, or a warm Wi-Fi standby while on a cable (section 14.7). The PC decides when to switch. */
+    private fun upgrade() {
+        if (attempt != null) return
+        val a = active ?: return
+        val same = fresh().filter { it.pcId == pcId || (it.pcId == null && it.link == LinkKind.USB_DEBUGGING) }
+        val better = same.filter { it.link.ordinal < a.link.ordinal && standby?.link != it.link }.minByOrNull { it.link.ordinal }
+        val warm = if (a.link.isCable && standby == null) same.firstOrNull { it.link == LinkKind.WIFI } else null
+        (better ?: warm)?.let { connect(it, Purpose.STANDBY, a.sessionId.toHex()) }
+    }
+
+    private fun maybeOfferBluetooth(t: Long) {
+        val b = bluetooth ?: return
+        val show = sdk >= 31 && !b.permitted() && LinkKind.BLUETOOTH in allowed && t - searchStartedAt >= OFFER_BLUETOOTH_AFTER_MS &&
+            fresh().isEmpty() && store.known().values.any { it.approved }
+        offerBluetooth(show)
+    }
+
+    private fun offerBluetooth(show: Boolean) {
+        if (show != bluetoothOffered) {
+            bluetoothOffered = show
+            emit(LinkEvent.BluetoothOffer(show))
+        }
+    }
+
+    private fun forget(id: String) {
+        store.forget(id)
+        if (pcId == id) {
+            active?.send(Bye("forgotten"))
+            active?.close()
+            standby?.close()
+            active = null
+            standby = null
+            router.use(null)
+            pcId = null
+            heldSessionId = null
+            emit(LinkEvent.Ended)
+            searching()
+        }
+        emit(LinkEvent.KnownChanged)
+    }
+
+    private fun searching() {
+        phase = Phase.SEARCHING
+        phaseSince = now()
+        searchStartedAt = now()
+        pace()
+        setConnection(Connection.Searching())
+    }
+
+    private fun setConnection(c: Connection) {
+        if (c == connection) return
+        connection = c
+        emit(LinkEvent.ConnectionChanged(c))
+    }
+
+    override fun close() {
+        seeker.close()
+        active?.close()
+        standby?.close()
+        router.use(null)
+        super.close()
+    }
+
+    private companion object {
+        const val TICK_MS = 1_000L
+        const val CANDIDATE_TTL_MS = 5_000L
+        const val DIAL_MS = 2_000
+        val RETRY_MS = longArrayOf(500, 1_000, 2_000)
+        const val BUSY_RETRY_MS = 3_000L
+        const val NOT_FOUND_AFTER_MS = 8_000L
+        const val HELP_AFTER_MS = 15_000L
+        const val BLUETOOTH_AFTER_MS = 5_000L
+        const val OFFER_BLUETOOTH_AFTER_MS = 10_000L
+        const val HOLD_MS = 30_000L
+        const val WAIT_MS = 5 * 60_000L
+        const val SPEAKER_STALL_MS = 1_000L
+    }
+}

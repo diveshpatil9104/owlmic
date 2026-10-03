@@ -35,21 +35,8 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('pc/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
 
-      - name: Ensure softcam.dll
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "pc\softcam.dll")) {
-            $expectedHash = '9D635E0AF682A883C3C7D407513D47E59B0883771701B101216820DFCF997F0B'
-            $url = 'https://raw.githubusercontent.com/diveshpatil9104/owlmic/3f78b5767f64f4542b4307c586da4b609d54d38e/pc/softcam.dll'
-            Invoke-WebRequest -Uri $url -OutFile pc\softcam.dll -UseBasicParsing
-            $hash = (Get-FileHash pc\softcam.dll -Algorithm SHA256).Hash
-            if ($hash -ne $expectedHash) {
-              throw "Downloaded softcam.dll checksum mismatch: $hash"
-            }
-          }
-
       - name: Rustfmt
-        run: cargo fmt --check --manifest-path pc/Cargo.toml
+        run: cargo fmt --all --check --manifest-path pc/Cargo.toml
 
       - name: Clippy
         run: cargo clippy --manifest-path pc/Cargo.toml --all-targets -- -D warnings
@@ -80,3 +67,17 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest lintDebug
+
+  names:
+    name: Product name spelling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check how Owlmic is written
+        run: |
+          if git grep -nIE 'OwlMic|owlMic|Owl[ -][Mm]ic' -- . ':!.github/workflows/ci.yml'; then
+            echo "Write the name as Owlmic, as in design/copy.json."
+            exit 1
+          fi

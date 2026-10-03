@@ -1,0 +1,19 @@
+[package]
+name = "owlmic-proto"
+description = "Owlmic wire formats (protocol version 3), with no I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+p256.workspace = true
+sha2.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+aes-gcm.workspace = true
+rand_core.workspace = true

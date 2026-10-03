@@ -39,8 +39,8 @@ Owlmic picks the best link by itself and moves between them without a gap:
 
 | Link | Notes |
 | :--- | :--- |
-| USB debugging | Best quality, lowest delay |
-| USB tethering | Nearly as good, same cable |
+| USB debugging | For developers: needs Developer options on the phone and adb on the PC |
+| USB tethering | The cable link for everyone: one switch on the phone |
 | Wi-Fi | Same network, or the phone's hotspot |
 | Bluetooth | Audio only, works almost anywhere |
 
@@ -70,8 +70,11 @@ cd android
 
 | Folder | What |
 | :--- | :--- |
-| `android/` | The phone app (Kotlin) |
-| `pc/` | The Windows app and its installer (Rust, Inno Setup) |
+| `android/` | The phone app (Kotlin): modules `app`, `core` and `media` |
+| `pc/` | The Windows app: a Rust workspace in `pc/crates`, the Windows 11 camera in `pc/vcam` and the installer (Inno Setup) |
+| `design/` | Colours, type, every text and the settings model, generated into both apps |
+| `protocol/` | The phone ↔ PC protocol and its test vectors |
+| `landing/` | The website |
 | `.github/` | CI, issue templates and contributor guides |
 
 ## Contributing

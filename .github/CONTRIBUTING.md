@@ -42,6 +42,13 @@ cd android
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
+## Shared sources
+
+Some things are defined once and generated into both apps at build time:
+
+- **`design/`**: colours and sizes (`tokens.json`), every name and message (`copy.json`) and the settings model (`settings.json`). Change texts and colours here, never by hand inside an app.
+- **`protocol/`**: the phone ↔ PC protocol. Both apps test against the files in `protocol/vectors/`, so a change to the protocol starts with the specification and the vectors.
+
 ## Making a change
 
 1. **Branch from `main`:** `<type>/<short-description>`, for example `fix/mic-restart` or `feat/speaker-mode`.

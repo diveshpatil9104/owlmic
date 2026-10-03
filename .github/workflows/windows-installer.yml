@@ -4,12 +4,14 @@ name: Windows installer
 # driver files, downloaded here and checked against a known checksum.
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
+  # The Release workflow calls this one for version tags.
+  workflow_call:
   pull_request:
     paths:
       - 'pc/installer/**'
       - 'pc/Cargo.toml'
+      - 'pc/crates/**'
+      - 'pc/vcam/**'
       - '.github/workflows/windows-installer.yml'
 
 permissions:
@@ -22,6 +24,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # libopus, built from the same submodule as the Android app.
+          submodules: recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -109,6 +114,20 @@ jobs:
           & $iscc.FullName "/DMyAppVersion=$version" pc\installer\owlmic.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item pc\target\release\owlmic.exe "pc\installer\Output\Owlmic-v$version-windows-x64.exe"
+
+      - name: Check the installer size
+        shell: pwsh
+        run: |
+          # The design's budget: about 4 MB, never above 5 MB.
+          $limit = 5MB
+          foreach ($f in 'pc\target\release\owlmic.exe', 'pc\target\release\owlmic_vcam.dll', 'pc\softcam.dll') {
+            '{0,-40} {1,8:N2} MB' -f $f, ((Get-Item $f).Length / 1MB)
+          }
+          '{0,-40} {1,8:N2} MB' -f 'pc\installer\driver (all files)', ((Get-ChildItem pc\installer\driver -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
+          $setup = Get-Item pc\installer\Output\Owlmic-Setup-*.exe
+          $size = $setup.Length
+          '{0,-40} {1,8:N2} MB' -f $setup.Name, ($size / 1MB)
+          if ($size -gt $limit) { throw ("The installer is {0:N2} MB, above the 5 MB budget." -f ($size / 1MB)) }
 
       - name: Upload the installer and owlmic.exe
         uses: actions/upload-artifact@v7

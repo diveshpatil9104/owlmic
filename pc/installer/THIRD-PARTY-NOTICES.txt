@@ -9,3 +9,21 @@ Owlmic microphone
 Owlmic Cam
   Owlmic Cam runs on softcam by tshino, under the MIT License.
   https://github.com/tshino/softcam
+
+Opus audio codec (libopus)
+  Copyright (c) Xiph.Org Foundation, Skype Limited, Octasic, Jean-Marc Valin, Timothy B. Terriberry,
+  CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo, Mozilla, Amazon.
+  License: BSD 3-Clause. https://opus-codec.org/license/
+
+Noise reduction (RNNoise, through nnnoiseless)
+  Copyright (c) 2017 Mozilla, 2007-2017 Jean-Marc Valin, 2005-2017 Xiph.Org Foundation, 2003-2004 Mark Borgerding.
+  License: BSD 3-Clause. https://github.com/xiph/rnnoise/blob/main/COPYING
+
+Icons (Lucide)
+  Copyright (c) Lucide Contributors.
+  License: ISC. https://lucide.dev/license
+
+Rust libraries
+  windows-rs (Microsoft), RustCrypto p256, sha2, hkdf, hmac and aes-gcm, serde, serde_json and base64,
+  each under the MIT License or the Apache License 2.0.
+  https://github.com/microsoft/windows-rs  https://github.com/RustCrypto  https://github.com/serde-rs

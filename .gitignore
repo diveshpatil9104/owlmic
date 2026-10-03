@@ -1,9 +1,9 @@
 # Android / Gradle
-android/app/build/
 android/build/
+android/*/build/
 android/.gradle/
 android/.kotlin/
-android/app/.cxx/
+android/*/.cxx/
 android/captures/
 local.properties
 *.apk
