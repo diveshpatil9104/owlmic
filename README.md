@@ -39,8 +39,8 @@ Owlmic picks the best link by itself and moves between them without a gap:
 
 | Link | Notes |
 | :--- | :--- |
-| USB debugging | Best quality, lowest delay |
-| USB tethering | Nearly as good, same cable |
+| USB debugging | For developers: needs Developer options on the phone and adb on the PC |
+| USB tethering | The cable link for everyone: one switch on the phone |
 | Wi-Fi | Same network, or the phone's hotspot |
 | Bluetooth | Audio only, works almost anywhere |
 

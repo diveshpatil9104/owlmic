@@ -24,12 +24,18 @@ enum Event {
     Changed,
 }
 
-/// Where adb lives: `adb\adb.exe` next to owlmic.exe, or `adb` on the PATH while developing.
+/// adb isn't bundled: phones with USB debugging belong to people who already have it, from the
+/// Android SDK (ANDROID_HOME, ANDROID_SDK_ROOT or Android Studio's default folder) or on the PATH.
 pub fn adb_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|e| e.parent().map(|d| d.join("adb").join("adb.exe")))
-        .filter(|p| p.exists())
+    let sdk_roots = ["ANDROID_HOME", "ANDROID_SDK_ROOT"]
+        .into_iter()
+        .filter_map(|var| std::env::var_os(var).map(PathBuf::from))
+        .chain(
+            std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Android").join("Sdk")),
+        );
+    sdk_roots
+        .map(|root| root.join("platform-tools").join("adb.exe"))
+        .find(|p| p.exists())
         .unwrap_or_else(|| PathBuf::from("adb"))
 }
 

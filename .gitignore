@@ -18,9 +18,8 @@ pc/target/
 *.so
 pc/softcam.dll
 
-# Windows installer: driver files and adb downloaded by CI, and the build output
+# Windows installer: driver files downloaded by CI, and the build output
 pc/installer/driver/
-pc/installer/adb/
 pc/installer/Output/
 
 # IDE

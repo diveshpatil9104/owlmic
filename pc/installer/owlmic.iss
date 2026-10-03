@@ -1,8 +1,8 @@
-; Owlmic Windows installer (Inno Setup 6). Installs owlmic.exe, Owlmic Mic, Owlmic Cam and adb, opens the
+; Owlmic Windows installer (Inno Setup 6). Installs owlmic.exe, Owlmic Mic and Owlmic Cam, opens the
 ; firewall for TCP 7653 and UDP 7654 to 7655, and starts Owlmic at sign-in.
 ;
 ; Build: ISCC /DMyAppVersion=x.y.z owlmic.iss, after cargo build --release and with the Owlmic microphone
-; driver files in installer\driver and adb in installer\adb (the CI workflow windows-installer.yml does all three).
+; driver files in installer\driver (the CI workflow windows-installer.yml does both).
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0"
@@ -58,7 +58,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#OwlmicExe}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 Source: "{#OwlmicVcam}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\softcam.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "adb\*"; DestDir: "{app}\adb"; Flags: ignoreversion
 Source: "setup-audio-device.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "driver\*"; DestDir: "{app}\driver"; Flags: ignoreversion recursesubdirs
