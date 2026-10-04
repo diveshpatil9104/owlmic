@@ -22,7 +22,7 @@ pub mod adb;
 #[cfg(windows)]
 pub mod bt;
 
-pub use hub::{LinkEvent, LinkHub, LinkMsg, LinkView};
+pub use hub::{BtAddr, LinkEvent, LinkHub, LinkMsg, LinkView};
 pub use media::{MediaSink, Routes};
 
 /// Link kinds, by priority (SYSTEM_DESIGN section 14.1). Lower is better.

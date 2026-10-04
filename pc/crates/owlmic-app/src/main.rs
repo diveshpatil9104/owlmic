@@ -16,6 +16,12 @@ fn main() {
             1
         });
     }
+    // The installer runs this before replacing files and on uninstall: the running Owlmic
+    // quits as if Quit were clicked, so the PC speakers are unmuted and the tray icon goes.
+    if has("--quit") {
+        let gone = owlmic_ui::win::quit_running(std::time::Duration::from_secs(5));
+        std::process::exit(if gone { 0 } else { 1 });
+    }
     if owlmic_app::instance::already_running() {
         owlmic_ui::win::open_running();
         return;

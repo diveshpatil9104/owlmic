@@ -83,6 +83,9 @@ pub struct Reject {
     /// The phone that has the PC, when `reason` is busy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// The PC's own protocol version, when `reason` is version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proto: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,6 +274,19 @@ mod tests {
             let back: serde_json::Value = serde_json::from_slice(&message.to_payload()).unwrap();
             assert_eq!(back, m["payload"], "{}", m["name"]);
         }
+    }
+
+    #[test]
+    fn a_version_reject_says_the_pcs_version() {
+        let m = Message::from_payload(kind::REJECT, br#"{"reason":"version","proto":4}"#)
+            .unwrap()
+            .unwrap();
+        let expected = Reject {
+            reason: RejectReason::Version,
+            owner: None,
+            proto: Some(4),
+        };
+        assert_eq!(m, Message::Reject(expected));
     }
 
     #[test]

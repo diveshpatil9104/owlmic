@@ -45,3 +45,40 @@ dependencies {
 
     testImplementation(libs.junit)
 }
+
+/**
+ * The third-party notices shown under Settings → About → Open-source licences: the texts of the bundled libopus (BSD)
+ * and Geist fonts (OFL) as they ship, so the app carries the notices their licences ask for.
+ */
+abstract class GenerateNotices : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val opus: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val geist: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val assetsDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val text = listOf("libopus" to opus, "Geist" to geist).joinToString("\n\n\n") { (name, file) ->
+            name + "\n\n" + file.get().asFile.readText().trim()
+        }
+        assetsDir.get().asFile.apply { mkdirs() }.resolve("licences.txt").writeText(text + "\n")
+    }
+}
+
+val generateNotices = tasks.register<GenerateNotices>("generateNotices") {
+    opus.set(rootProject.layout.projectDirectory.file("media/src/main/cpp/opus/COPYING"))
+    geist.set(rootProject.layout.projectDirectory.file("licenses/geist-OFL.txt"))
+    assetsDir.set(layout.buildDirectory.dir("generated/notices"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(generateNotices, GenerateNotices::assetsDir)
+    }
+}

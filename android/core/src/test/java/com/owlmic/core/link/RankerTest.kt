@@ -42,9 +42,17 @@ class RankerTest {
     }
 
     @Test
-    fun aBusyKnownPcIsWaitedFor() {
+    fun aBusyPcIsStillDialledSoItCanSayWhoHasIt() {
         val k = known(PcMemory("a", "A", true, lastUsedAt = 10))
-        assertEquals(Decision.Wait, Ranker.decide(listOf(pc("a", busy = true)), k, now))
+        assertEquals(Decision.Connect(pc("a", busy = true)), Ranker.decide(listOf(pc("a", busy = true)), k, now))
+    }
+
+    @Test
+    fun aBusyPcGoesBelowFreeOnes() {
+        val k = known(PcMemory("a", "A", true, lastUsedAt = 20), PcMemory("b", "B", true, lastUsedAt = 10))
+        val candidates = listOf(pc("a", busy = true), pc("b"))
+        assertEquals(listOf("b", "a"), Ranker.order(candidates, k, now).map { it.pcId })
+        assertEquals(Decision.Connect(pc("b")), Ranker.decide(candidates, k, now))
     }
 
     @Test

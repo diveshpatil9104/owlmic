@@ -27,44 +27,40 @@ pub fn commands(exe: &str) -> Vec<String> {
     out
 }
 
-/// Whether `netsh advfirewall firewall show rule name=... verbose` shows the rule enabled,
-/// allowing, and covering public networks (Windows often treats home Wi-Fi as public).
-pub fn rule_allows(netsh_output: &str, name: &str) -> bool {
-    let text = netsh_output.to_lowercase();
-    let field = |key: &str| {
-        text.lines()
-            .find_map(|l| {
-                l.trim()
-                    .strip_prefix(key)
-                    .map(|v| v.trim_start_matches(':').trim().to_owned())
-            })
-            .unwrap_or_default()
-    };
-    text.contains(&name.to_lowercase())
-        && field("enabled") == "yes"
-        && field("action") == "allow"
-        && field("profiles").contains("public")
+/// The public bit of a rule's profiles (NET_FW_PROFILE2_PUBLIC).
+const PROFILE_PUBLIC: i32 = 4;
+
+/// Whether a rule lets phones in: enabled, inbound, allowing, and covering public networks
+/// (Windows often treats home Wi-Fi as public).
+pub fn rule_allows(enabled: bool, inbound: bool, allow: bool, profiles: i32) -> bool {
+    enabled && inbound && allow && profiles & PROFILE_PUBLIC != 0
 }
 
+/// Reads the rules through the firewall's own API, which answers the same on every Windows
+/// language (netsh's output is translated). Needs COM on the calling thread.
 #[cfg(windows)]
 pub fn rules_present() -> bool {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    PORT_RULES.iter().all(|(name, _, _)| {
-        std::process::Command::new("netsh")
-            .args([
-                "advfirewall",
-                "firewall",
-                "show",
-                "rule",
-                &format!("name={name}"),
-                "verbose",
-            ])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .is_ok_and(|o| {
-                o.status.success() && rule_allows(&String::from_utf8_lossy(&o.stdout), name)
-            })
+    use windows::Win32::NetworkManagement::WindowsFirewall::{
+        INetFwPolicy2, NET_FW_ACTION_ALLOW, NET_FW_RULE_DIR_IN, NetFwPolicy2,
+    };
+    use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
+    use windows::core::BSTR;
+
+    let Ok(rules) = (unsafe {
+        CoCreateInstance::<_, INetFwPolicy2>(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER)
+            .and_then(|p| p.Rules())
+    }) else {
+        return false;
+    };
+    PORT_RULES.iter().all(|(name, _, _)| unsafe {
+        rules.Item(&BSTR::from(*name)).is_ok_and(|r| {
+            rule_allows(
+                r.Enabled().is_ok_and(|e| e.as_bool()),
+                r.Direction().is_ok_and(|d| d == NET_FW_RULE_DIR_IN),
+                r.Action().is_ok_and(|a| a == NET_FW_ACTION_ALLOW),
+                r.Profiles().unwrap_or(0),
+            )
+        })
     })
 }
 
@@ -72,31 +68,18 @@ pub fn rules_present() -> bool {
 mod tests {
     use super::*;
 
-    const SHOWN: &str = "
-Rule Name:                            Owlmic TCP
-----------------------------------------------------------------------
-Enabled:                              Yes
-Direction:                            In
-Profiles:                             Domain,Private,Public
-Protocol:                             TCP
-LocalPort:                            7653
-Action:                               Allow
-Ok.
-";
-
     #[test]
-    fn a_rule_must_be_enabled_allowing_and_cover_public_networks() {
-        assert!(rule_allows(SHOWN, "Owlmic TCP"));
-        assert!(!rule_allows(SHOWN, "Owlmic UDP Beacon"));
-        assert!(!rule_allows(
-            &SHOWN.replace("Domain,Private,Public", "Private"),
-            "Owlmic TCP"
-        ));
-        assert!(!rule_allows(&SHOWN.replace("Allow", "Block"), "Owlmic TCP"));
-        assert!(!rule_allows(
-            "\nNo rules match the specified criteria.\n",
-            "Owlmic TCP"
-        ));
+    fn a_rule_must_be_enabled_inbound_allowing_and_cover_public_networks() {
+        let all = 0x7FFF_FFFF;
+        assert!(rule_allows(true, true, true, all));
+        assert!(rule_allows(true, true, true, PROFILE_PUBLIC));
+        assert!(
+            !rule_allows(true, true, true, 1 | 2),
+            "domain and private only"
+        );
+        assert!(!rule_allows(false, true, true, all));
+        assert!(!rule_allows(true, false, true, all));
+        assert!(!rule_allows(true, true, false, all));
     }
 
     #[test]

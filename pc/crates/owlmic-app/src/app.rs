@@ -2,7 +2,7 @@
 //! them, and publishes one snapshot for the panel and the tray. It holds no media.
 
 use owlmic_devices::DeviceHealth;
-use owlmic_hub::{Hub, Outbox, Publisher};
+use owlmic_hub::{Health, Hub, Outbox, Publisher};
 use owlmic_link::{LinkEvent, LinkMsg, LinkView};
 use owlmic_media::hub::{Feature as MediaFeature, MediaEvent, MediaMsg};
 use owlmic_media::video::Framing;
@@ -12,7 +12,12 @@ use owlmic_session::{hex, id_from_hex};
 use owlmic_settings::hub::{SettingsEvent, SettingsMsg, SettingsView};
 use owlmic_settings::store::Store;
 use owlmic_ui::view::{Action, Connection, Feature, PanelState, PhoneEntry, Repair, Which};
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+/// A unit restarting for this long counts as broken, like one that failed.
+const LONG_DEGRADED: Duration = Duration::from_secs(10);
 
 pub enum AppMsg {
     Link(LinkEvent),
@@ -24,6 +29,47 @@ pub enum AppMsg {
     Ui(Action),
     /// This PC's addresses, for typing into the phone.
     Addresses(Vec<String>),
+    /// A supervised hub or I/O thread's health, as it changes.
+    Unit {
+        name: &'static str,
+        health: Health,
+    },
+    /// The Device Hub was built again after a crash: it starts with nothing on.
+    DevicesStarted,
+}
+
+impl AppMsg {
+    /// What a full mailbox may drop: views and reports a newer one replaces, and keyframe
+    /// requests the receiver repeats.
+    pub fn droppable(&self) -> bool {
+        matches!(
+            self,
+            AppMsg::Link(
+                LinkEvent::View(_)
+                    | LinkEvent::Stalled { .. }
+                    | LinkEvent::FromPhone(Message::Report(_))
+            ) | AppMsg::Media(MediaEvent::View(_) | MediaEvent::ToPhone(Message::KeyframeRequest))
+                | AppMsg::Settings(SettingsEvent::View(_))
+                | AppMsg::Session(SessionEvent::Changed(_))
+                | AppMsg::Addresses(_)
+        )
+    }
+}
+
+/// The part of the Repair tile a broken unit shows as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Mic,
+    Net,
+}
+
+/// Bluetooth and USB debugging are optional links, so they never ask for a repair.
+fn repair_part(unit: &str) -> Option<Part> {
+    match unit {
+        "devices" | "media" => Some(Part::Mic),
+        "session" | "settings" | "link" | "listener" | "answerer" | "udp" => Some(Part::Net),
+        _ => None,
+    }
 }
 
 /// What the App Hub asks of the Device Hub, kept free of Windows types.
@@ -60,6 +106,21 @@ struct AppState {
     health: DeviceHealth,
     repairing: bool,
     addresses: Vec<String>,
+    /// The link that carried the session last, for the indicator while it reconnects.
+    last_link: Option<u8>,
+    /// Supervised units that aren't well, and since when.
+    units: BTreeMap<&'static str, (Health, Instant)>,
+    /// What the Device Hub was last told, to tell it again after it restarts.
+    devices: Devices,
+}
+
+#[derive(Default)]
+struct Devices {
+    mic: Option<bool>,
+    camera: Option<bool>,
+    speaker: Option<bool>,
+    quiet: Option<bool>,
+    shape: Option<(Framing, bool)>,
 }
 
 pub struct AppHub {
@@ -68,6 +129,8 @@ pub struct AppHub {
     ui: Publisher<PanelState>,
     state: AppState,
     shown: PanelState,
+    /// When a unit that is still restarting will have been at it long enough to show.
+    recheck_at: Option<Instant>,
 }
 
 /// A setting's next value, for a tile or row that cycles through them.
@@ -92,6 +155,7 @@ impl AppHub {
             ui,
             state,
             shown: PanelState::default(),
+            recheck_at: None,
         }
     }
 
@@ -109,7 +173,7 @@ impl AppHub {
             LinkEvent::Proven {
                 conn,
                 phone,
-                decision,
+                resume,
                 code,
                 link,
             } => {
@@ -117,7 +181,7 @@ impl AppHub {
                 self.w.session.send(SessionMsg::Proven {
                     conn,
                     phone,
-                    decision,
+                    resume,
                     code,
                     link,
                 });
@@ -138,7 +202,8 @@ impl AppHub {
                 m @ (Message::State(_)
                 | Message::StreamStart(_)
                 | Message::StreamStop(_)
-                | Message::RestartStream(_)),
+                | Message::RestartStream(_)
+                | Message::Report(_)),
             ) => {
                 self.w.media.send(MediaMsg::FromPhone(m));
             }
@@ -153,7 +218,10 @@ impl AppHub {
                     *r = false;
                 }
             }
-            LinkEvent::View(v) => self.state.link = v,
+            LinkEvent::View(v) => {
+                self.state.last_link = v.link.or(self.state.last_link);
+                self.state.link = v;
+            }
         }
     }
 
@@ -179,32 +247,89 @@ impl AppHub {
                 });
                 self.w.settings.send(SettingsMsg::Session(Some(key)));
             }
-            SessionEvent::Rejected { conn, reason } => self.w.link.send(LinkMsg::Reject {
+            SessionEvent::Approval { conn } => self.w.link.send(LinkMsg::Pending { conn }),
+            SessionEvent::Rejected {
                 conn,
                 reason,
-                owner: None,
+                owner,
+            } => self.w.link.send(LinkMsg::Reject {
+                conn,
+                reason,
+                owner,
             }),
             SessionEvent::Ended { session_id } => {
                 self.w.link.send(LinkMsg::SessionEnded { session_id });
                 self.w.media.send(MediaMsg::Ended);
                 self.w.settings.send(SettingsMsg::Session(None));
                 self.state.restarting = [false; 4];
+                self.state.last_link = None;
             }
             SessionEvent::Changed(view) => self.state.session = view,
         }
     }
 
     fn on_media(&mut self, e: MediaEvent) {
-        let d = &self.w.devices;
-        match e {
-            MediaEvent::Mic(on) => d(DeviceCommand::Mic(on)),
-            MediaEvent::Camera(on) => d(DeviceCommand::Camera(on)),
-            MediaEvent::Speaker(on) => d(DeviceCommand::Speaker(on)),
-            MediaEvent::Shape { framing, mirror } => d(DeviceCommand::Shape { framing, mirror }),
-            MediaEvent::QuietPc(on) => d(DeviceCommand::QuietPc(on)),
-            MediaEvent::ToPhone(m) => self.w.link.send(LinkMsg::Send(m)),
-            MediaEvent::View(s) => self.state.features = s,
+        let d = &mut self.state.devices;
+        let command = match e {
+            MediaEvent::Mic(on) => DeviceCommand::Mic(*d.mic.insert(on)),
+            MediaEvent::Camera(on) => DeviceCommand::Camera(*d.camera.insert(on)),
+            MediaEvent::Speaker(on) => DeviceCommand::Speaker(*d.speaker.insert(on)),
+            MediaEvent::Shape { framing, mirror } => {
+                d.shape = Some((framing, mirror));
+                DeviceCommand::Shape { framing, mirror }
+            }
+            MediaEvent::QuietPc(on) => DeviceCommand::QuietPc(*d.quiet.insert(on)),
+            MediaEvent::ToPhone(m) => {
+                self.w.link.send(LinkMsg::Send(m));
+                return;
+            }
+            MediaEvent::View(s) => {
+                self.state.features = s;
+                return;
+            }
+        };
+        (self.w.devices)(command);
+    }
+
+    /// A rebuilt Device Hub has nothing on: it hears again what it was last told.
+    fn devices_started(&self) {
+        let d = &self.state.devices;
+        let commands = [
+            d.quiet.map(DeviceCommand::QuietPc),
+            d.shape
+                .map(|(framing, mirror)| DeviceCommand::Shape { framing, mirror }),
+            d.mic.map(DeviceCommand::Mic),
+            d.camera.map(DeviceCommand::Camera),
+            d.speaker.map(DeviceCommand::Speaker),
+        ];
+        for c in commands.into_iter().flatten() {
+            (self.w.devices)(c);
         }
+    }
+
+    fn on_unit(&mut self, name: &'static str, health: Health) {
+        if health == Health::Ok {
+            self.state.units.remove(name);
+        } else {
+            let since = self
+                .state
+                .units
+                .get(name)
+                .map_or_else(Instant::now, |(_, t)| *t);
+            self.state.units.insert(name, (health, since));
+        }
+    }
+
+    /// Whether a unit behind this part of the Repair tile is broken now.
+    fn unit_broken(&self, part: Part, now: Instant) -> bool {
+        self.state.units.iter().any(|(name, (h, since))| {
+            repair_part(name) == Some(part)
+                && match h {
+                    Health::Failed(_) => true,
+                    Health::Degraded(_) => now.duration_since(*since) >= LONG_DEGRADED,
+                    Health::Ok => false,
+                }
+        })
     }
 
     fn on_settings(&mut self, e: SettingsEvent) {
@@ -276,14 +401,16 @@ impl AppHub {
                 }
             }
             Action::Quit => (self.w.quit)(),
-            Action::Open(_) => {}
         }
     }
 
-    fn panel(&self) -> PanelState {
+    fn panel(&self, now: Instant) -> PanelState {
         let s = &self.state;
         let connection = match &s.session.phase {
-            PhaseView::Idle => Connection::NotConnected,
+            PhaseView::Idle => match s.link.connecting {
+                Some(link) => Connection::Connecting { link },
+                None => Connection::NotConnected,
+            },
             PhaseView::Approval { phone, code } => Connection::Approval {
                 phone: phone.clone(),
                 code: code.clone(),
@@ -296,7 +423,7 @@ impl AppHub {
             },
             PhaseView::Held { phone } => Connection::Reconnecting {
                 phone: phone.clone(),
-                link: s.link.link.unwrap_or(s.proving_link),
+                link: s.link.link.or(s.last_link).unwrap_or(s.proving_link),
             },
         };
         let feature = |f: FeatureState, stream: usize| match f {
@@ -324,9 +451,9 @@ impl AppHub {
                 .collect(),
             addresses: s.addresses.clone(),
             repair: Repair {
-                mic: !s.health.mic,
+                mic: !s.health.mic || self.unit_broken(Part::Mic, now),
                 cam: !s.health.cam,
-                net: !s.health.net,
+                net: !s.health.net || self.unit_broken(Part::Net, now),
             },
             repairing: s.repairing,
             version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -347,8 +474,33 @@ impl Hub for AppHub {
             AppMsg::Repairing(r) => self.state.repairing = r,
             AppMsg::Ui(a) => self.on_ui(a),
             AppMsg::Addresses(a) => self.state.addresses = a,
+            AppMsg::Unit { name, health } => self.on_unit(name, health),
+            AppMsg::DevicesStarted => self.devices_started(),
         }
-        let panel = self.panel();
+        self.show(Instant::now());
+    }
+
+    /// A unit that stays degraded turns into a repair.
+    fn tick(&mut self, now: Instant) {
+        self.show(now);
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        self.recheck_at
+    }
+}
+
+impl AppHub {
+    fn show(&mut self, now: Instant) {
+        self.recheck_at = self
+            .state
+            .units
+            .values()
+            .filter(|(h, _)| matches!(h, Health::Degraded(_)))
+            .map(|(_, since)| *since + LONG_DEGRADED)
+            .filter(|t| *t > now)
+            .min();
+        let panel = self.panel(now);
         if panel != self.shown {
             self.shown = panel.clone();
             self.ui.publish(panel);
@@ -360,6 +512,7 @@ impl Hub for AppHub {
 mod tests {
     use super::*;
     use owlmic_hub::{Inbox, mailbox};
+    use owlmic_link::LinkView;
     use owlmic_session::sessions::Phone;
     use owlmic_settings::store::PlainProtector;
     use std::sync::Mutex;
@@ -538,5 +691,128 @@ mod tests {
             Some("24")
         );
         assert_eq!(next_value("nope", "x"), None);
+    }
+
+    #[test]
+    fn a_rebuilt_device_hub_hears_again_what_was_on() {
+        let mut r = rig();
+        r.hub.handle(AppMsg::Media(MediaEvent::Mic(true)));
+        r.hub.handle(AppMsg::Media(MediaEvent::Speaker(true)));
+        r.hub.handle(AppMsg::Media(MediaEvent::Speaker(false)));
+        r.devices.lock().unwrap().clear();
+        r.hub.handle(AppMsg::DevicesStarted);
+        assert_eq!(
+            r.devices.lock().unwrap().as_slice(),
+            &[DeviceCommand::Mic(true), DeviceCommand::Speaker(false)]
+        );
+    }
+
+    #[test]
+    fn a_phone_shaking_hands_shows_as_connecting() {
+        let mut r = rig();
+        r.hub.handle(AppMsg::Link(LinkEvent::View(LinkView {
+            connecting: Some(owlmic_link::LINK_WIFI),
+            ..LinkView::default()
+        })));
+        assert_eq!(
+            r.ui.read().connection,
+            Connection::Connecting {
+                link: owlmic_link::LINK_WIFI
+            }
+        );
+    }
+
+    #[test]
+    fn reconnecting_shows_the_link_that_carried_the_session() {
+        let mut r = rig();
+        r.hub.handle(AppMsg::Link(LinkEvent::Proven {
+            conn: 2,
+            phone: Phone {
+                id: [1; 16],
+                name: "A".into(),
+                model: "A".into(),
+                static_pub: String::new(),
+            },
+            resume: None,
+            code: "0000".into(),
+            link: owlmic_link::LINK_BLUETOOTH,
+        }));
+        r.hub.handle(AppMsg::Link(LinkEvent::View(LinkView {
+            link: Some(owlmic_link::LINK_USB_DEBUGGING),
+            ..LinkView::default()
+        })));
+        r.hub
+            .handle(AppMsg::Link(LinkEvent::View(LinkView::default())));
+        r.hub
+            .handle(AppMsg::Session(SessionEvent::Changed(SessionView {
+                phase: PhaseView::Held { phone: "A".into() },
+                phones: vec![],
+            })));
+        assert!(matches!(
+            r.ui.read().connection,
+            Connection::Reconnecting { link, .. } if link == owlmic_link::LINK_USB_DEBUGGING
+        ));
+    }
+
+    #[test]
+    fn a_failed_unit_asks_for_a_repair_and_a_long_restart_does_too() {
+        let mut r = rig();
+        r.hub.handle(AppMsg::Unit {
+            name: "listener",
+            health: Health::Failed("port".into()),
+        });
+        assert!(r.ui.read().repair.net);
+        r.hub.handle(AppMsg::Unit {
+            name: "listener",
+            health: Health::Ok,
+        });
+        assert!(!r.ui.read().repair.net);
+        r.hub.handle(AppMsg::Unit {
+            name: "devices",
+            health: Health::Degraded("restarting".into()),
+        });
+        assert!(!r.ui.read().repair.mic, "a short restart is fine");
+        let due = r.hub.next_deadline().unwrap();
+        r.hub.tick(due);
+        assert!(r.ui.read().repair.mic);
+        assert_eq!(r.hub.next_deadline(), None, "nothing more to wait for");
+        r.hub.handle(AppMsg::Unit {
+            name: "bluetooth",
+            health: Health::Failed("no radio".into()),
+        });
+        assert!(!r.ui.read().repair.net, "Bluetooth is optional");
+    }
+
+    #[test]
+    fn approval_and_busy_answers_reach_the_link() {
+        let mut r = rig();
+        r.hub
+            .handle(AppMsg::Session(SessionEvent::Approval { conn: 4 }));
+        assert!(matches!(
+            r.link.try_recv(),
+            Some(LinkMsg::Pending { conn: 4 })
+        ));
+        r.hub.handle(AppMsg::Session(SessionEvent::Rejected {
+            conn: 5,
+            reason: owlmic_proto::messages::RejectReason::Busy,
+            owner: Some("Pixel 8".into()),
+        }));
+        assert!(
+            matches!(r.link.try_recv(), Some(LinkMsg::Reject { conn: 5, owner: Some(o), .. }) if o == "Pixel 8")
+        );
+    }
+
+    #[test]
+    fn views_may_be_dropped_but_lifecycle_messages_never() {
+        assert!(AppMsg::Link(LinkEvent::View(LinkView::default())).droppable());
+        assert!(AppMsg::Settings(SettingsEvent::View(SettingsView::default())).droppable());
+        assert!(!AppMsg::Link(LinkEvent::ConnClosed { conn: 1 }).droppable());
+        assert!(
+            !AppMsg::Session(SessionEvent::Ended {
+                session_id: [0; 16]
+            })
+            .droppable()
+        );
+        assert!(!AppMsg::Ui(Action::Allow).droppable());
     }
 }

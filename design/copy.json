@@ -20,7 +20,6 @@
     "status.reconnecting": "Reconnecting",
     "status.waiting": "Waiting for {pc}",
     "status.update": "Update Owlmic on your {device}",
-    "adb.allow": "Tap Allow on your phone's USB debugging prompt",
     "bt.try": "Try Bluetooth",
     "mic.permission": "Allow microphone access",
     "camera.permission": "Allow camera access",
@@ -136,6 +135,14 @@
     "pc.quit": "Quit Owlmic",
     "pc.noPhones": "No phones yet",
     "pc.blocked": "Blocked",
-    "ui.and": "and"
+    "ui.and": "and",
+    "device.phone": "phone",
+    "device.pc": "PC",
+    "status.tetherHint": "Plugged in. Turn on USB tethering to connect by cable.",
+    "status.keyChanged": "{pc} looks different now. Forget it in Settings to pair again.",
+    "status.cantReach": "Can't reach {pc}",
+    "ui.openTethering": "Turn on USB tethering",
+    "feature.failed": "Didn't start. Tap to try again.",
+    "ui.mit": "MIT"
   }
 }

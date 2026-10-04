@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -17,106 +16,128 @@ object HubDispatcher {
     val default: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 }
 
+/** What a hub reports to its parent once a second (section 11.2). */
+sealed interface Health {
+    data object Ok : Health
+
+    data class Degraded(val reason: String) : Health
+
+    data class Failed(val reason: String) : Health
+}
+
 /**
- * A hub: one bounded mailbox, drained on [dispatcher]. A full mailbox drops its oldest message, so a burst of
- * stale events (an old report, an old level) never blocks the thread that posts. Exceptions in [handle] are
- * caught and handed to [onFailure], so one bad message never takes the hub down.
+ * A hub: one mailbox, drained on [dispatcher], and the supervised unit of section 11.3. When the mailbox holds
+ * [capacity] messages, a [droppable] one (a stale report, a repeated answer) gives way; lifecycle and decision
+ * messages are never dropped. An exception in [handle] goes to [onFailure], then the hub [restart]s after 100 ms,
+ * 500 ms or 2 s; past 5 restarts a minute it stays as it is and reports [Health.Failed].
  */
 abstract class Hub<M>(
     val name: String,
-    capacity: Int = 64,
+    private val capacity: Int = 64,
     dispatcher: CoroutineDispatcher = HubDispatcher.default,
+    now: () -> Long = System::currentTimeMillis,
 ) {
     protected val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    private val mailbox = Channel<M>(capacity, BufferOverflow.DROP_OLDEST)
+    private val mailbox = ArrayDeque<M>()
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val restarts = RestartPolicy(now)
+    private var restartPending = false
+    private var closed = false
+
+    @Volatile private var health: Health = Health.Ok
 
     init {
         scope.launch {
-            for (message in mailbox) {
-                try {
-                    handle(message)
-                } catch (e: Exception) {
-                    onFailure(message, e)
-                }
-            }
+            for (signal in wake) drain()
         }
     }
 
     /** Any thread. Never blocks. */
     fun post(message: M) {
-        mailbox.trySend(message)
+        synchronized(mailbox) {
+            if (closed) return
+            if (mailbox.size >= capacity) {
+                val stale = mailbox.indexOfFirst(::droppable)
+                when {
+                    stale >= 0 -> mailbox.removeAt(stale)
+                    droppable(message) -> return
+                }
+            }
+            mailbox.addLast(message)
+        }
+        wake.trySend(Unit)
     }
+
+    /** Any thread. */
+    fun health(): Health = health
 
     protected abstract fun handle(message: M)
 
+    /** Messages that may be lost when the mailbox is full. */
+    protected open fun droppable(message: M) = false
+
     protected open fun onFailure(message: M, error: Exception) = Unit
 
-    /** Runs [block] on this hub after [delayMs]. */
+    /** Brings the hub back to a known state after a failure. */
+    protected open fun restart() = Unit
+
+    /** Runs [block] on this hub after [delayMs], guarded like a message. */
     protected fun later(delayMs: Long, block: () -> Unit) {
         scope.launch {
             delay(delayMs)
+            guarded(block)
+        }
+    }
+
+    private fun drain() {
+        while (true) {
+            val message = synchronized(mailbox) { mailbox.removeFirstOrNull() } ?: return
+            try {
+                handle(message)
+            } catch (e: Exception) {
+                runCatching { onFailure(message, e) }
+                failed(e)
+            }
+        }
+    }
+
+    private fun guarded(block: () -> Unit) {
+        try {
             block()
+        } catch (e: Exception) {
+            failed(e)
+        }
+    }
+
+    private fun failed(error: Exception) {
+        val reason = error.message ?: error.javaClass.simpleName
+        if (restartPending) return
+        val delayMs = restarts.nextDelayMs()
+        if (delayMs == null) {
+            health = Health.Failed(reason)
+            return
+        }
+        health = Health.Degraded(reason)
+        restartPending = true
+        scope.launch {
+            delay(delayMs)
+            restartPending = false
+            guarded {
+                restart()
+                if (!restartPending) health = Health.Ok
+            }
         }
     }
 
     open fun close() {
-        mailbox.close()
+        synchronized(mailbox) {
+            closed = true
+            mailbox.clear()
+        }
+        wake.close()
         scope.cancel()
     }
 }
 
-/**
- * Keeps one module running: creates it with [factory], restarts it with [RestartPolicy] when it throws, and
- * reports its health. Call everything from the owning hub's dispatcher.
- */
-class Supervised<C>(
-    private val factory: () -> Module<C>,
-    private val schedule: (delayMs: Long, block: () -> Unit) -> Unit,
-    private val policy: RestartPolicy = RestartPolicy(),
-) {
-    private var module: Module<C>? = null
-    private var gaveUp: String? = null
-    private var running = false
-
-    val name: String get() = module?.name ?: "module"
-
-    fun start() {
-        running = true
-        gaveUp = null
-        launch()
-    }
-
-    fun handle(command: C) {
-        val m = module ?: return
-        runGuarded { m.handle(command) }
-    }
-
-    fun health(): Health = gaveUp?.let { Health.Failed(it) } ?: runCatching { module?.health() }.getOrNull() ?: Health.Degraded("starting")
-
-    fun stop() {
-        running = false
-        module?.let { runCatching { it.stop() } }
-        module = null
-    }
-
-    private fun launch() {
-        val m = factory()
-        module = m
-        runGuarded { m.start() }
-    }
-
-    private fun runGuarded(block: () -> Unit) {
-        try {
-            block()
-        } catch (e: Exception) {
-            module?.let { runCatching { it.stop() } }
-            module = null
-            val delay = policy.nextDelayMs()
-            if (delay == null) {
-                gaveUp = e.message ?: e.javaClass.simpleName
-                return
-            }
-            schedule(delay) { if (running && module == null) launch() }
-        }
-    }
-}
+/** The worst of [all]: one failed hub fails the app, one degraded hub degrades it. */
+fun worst(all: List<Health>): Health = all.firstOrNull { it is Health.Failed } ?: all.firstOrNull { it is Health.Degraded } ?: Health.Ok

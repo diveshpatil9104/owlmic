@@ -1,6 +1,6 @@
 [package]
 name = "owlmic-hub"
-description = "The hub framework: bounded mailboxes, supervised modules, health and state snapshots"
+description = "The hub framework: bounded mailboxes, supervised hubs and threads, health and state snapshots"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

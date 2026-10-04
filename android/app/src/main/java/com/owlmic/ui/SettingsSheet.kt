@@ -235,15 +235,23 @@ private fun Addresses(state: AppState) {
     }
 }
 
+/** Version, the MIT licence, the website, the third-party notices (shown inline, from the app itself) and Donate. */
 @Composable
 private fun About() {
     val context = LocalContext.current
     val uri = LocalUriHandler.current
+    // A phone without a browser has nothing to open a link with; the tap then does nothing.
+    val open: (String) -> Unit = { url -> runCatching { uri.openUri(url) } }
     val version = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
+    var notices by remember { mutableStateOf<String?>(null) }
     Note(stringResource(Copy.string.ui_version, version))
-    Link(stringResource(Copy.string.ui_website)) { uri.openUri(WEBSITE) }
-    Link(stringResource(Copy.string.ui_licences)) { uri.openUri(LICENCES) }
-    Link(stringResource(Copy.string.ui_donate)) { uri.openUri(DONATE) }
+    Link(stringResource(Copy.string.ui_mit)) { open(LICENSE) }
+    Link(stringResource(Copy.string.ui_website)) { open(WEBSITE) }
+    Link(stringResource(Copy.string.ui_licences)) {
+        notices = if (notices != null) null else runCatching { context.assets.open(NOTICES).bufferedReader().use { it.readText() } }.getOrNull()
+    }
+    notices?.let { BasicText(it, Modifier.padding(horizontal = Theme.padding, vertical = 8.dp), style = Theme.caption.copy(color = Theme.text2)) }
+    Link(stringResource(Copy.string.ui_donate)) { open(DONATE) }
 }
 
 @Composable
@@ -254,5 +262,6 @@ private fun Link(text: String, onClick: () -> Unit) {
 }
 
 private const val WEBSITE = "https://owlmic.app"
-private const val LICENCES = "https://github.com/diveshpatil9104/owlmic/blob/main/LICENSE"
+private const val LICENSE = "https://github.com/diveshpatil9104/owlmic/blob/main/LICENSE"
+private const val NOTICES = "licences.txt"
 private const val DONATE = "https://github.com/sponsors/diveshpatil9104"

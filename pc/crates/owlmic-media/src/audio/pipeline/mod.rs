@@ -1,6 +1,7 @@
 mod constants;
 mod controls;
 mod resample;
+mod ring;
 #[cfg(test)]
 mod tests;
 
@@ -8,20 +9,23 @@ pub use constants::*;
 
 use crate::audio::dsp::AudioDsp;
 use resample::{JitterStats, Playout};
-use std::collections::VecDeque;
+use ring::SampleRing;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::Instant;
 
+/// The mic's jitter buffer. The receive thread pushes and the output device's thread pops; each
+/// lock here belongs to one of the two sides, so neither ever waits on the other.
 pub struct JitterBuffer {
-    buffer: Mutex<VecDeque<i16>>,
+    ring: SampleRing,
     base_target_samples: AtomicUsize,
     adaptive_target_samples: AtomicUsize,
-    peak_level: AtomicUsize,
-    ns_strength: AtomicUsize,
     ns_enabled: AtomicBool,
+    /// Receive side.
     dsp: Mutex<AudioDsp>,
+    /// Receive side.
     stats: Mutex<JitterStats>,
+    /// Output side.
     playout: Mutex<Playout>,
     output_rate: AtomicU32,
 }
@@ -30,26 +34,15 @@ impl JitterBuffer {
     pub fn new() -> Self {
         let base_target = USB_TARGET_MS * SAMPLES_PER_MS;
         Self {
-            buffer: Mutex::new(VecDeque::with_capacity(MAX_SAMPLES)),
+            ring: SampleRing::new(),
             base_target_samples: AtomicUsize::new(base_target),
             adaptive_target_samples: AtomicUsize::new(base_target),
-            peak_level: AtomicUsize::new(0),
-            ns_strength: AtomicUsize::new(100),
             ns_enabled: AtomicBool::new(true),
             dsp: Mutex::new(AudioDsp::new()),
             stats: Mutex::new(JitterStats::new()),
             playout: Mutex::new(Playout::new()),
             output_rate: AtomicU32::new(SAMPLE_RATE),
         }
-    }
-
-    pub fn set_ns_strength(&self, pct: u32) {
-        self.ns_strength
-            .store(pct.min(100) as usize, Ordering::Release);
-    }
-
-    pub fn get_ns_strength(&self) -> u32 {
-        self.ns_strength.load(Ordering::Acquire) as u32
     }
 
     pub fn set_level(&self, level: u8) {
@@ -86,57 +79,32 @@ impl JitterBuffer {
         }
     }
 
-    pub fn push_samples(&self, samples: &[i16]) {
+    /// Receive side: noise reduction runs on `samples` where they are, then they are queued.
+    pub fn push_samples(&self, samples: &mut [i16]) {
         if samples.is_empty() {
             return;
         }
-
-        let mut processed = samples.to_vec();
         if let Ok(mut dsp) = self.dsp.lock() {
-            let ns = self.effective_ns_strength();
-            dsp.process(&mut processed, ns);
+            dsp.process(samples, self.ns_strength());
         }
-
-        resample::update_peak_level(&self.peak_level, &processed);
-
-        if let Ok(mut buf) = self.buffer.lock() {
-            buf.extend(processed.iter().copied());
-            if buf.len() > MAX_SAMPLES {
-                let excess = buf.len() - MAX_SAMPLES;
-                buf.drain(0..excess);
-            }
-        }
+        self.ring.push(samples);
     }
 
+    /// Receive side: drops what is queued; the output starts over at its next callback.
     pub fn reset(&self) {
-        if let Ok(mut buf) = self.buffer.lock() {
-            buf.clear();
-        }
-        if let Ok(mut playout) = self.playout.lock() {
-            *playout = Playout::new();
-        }
+        self.ring.flush();
         if let Ok(mut dsp) = self.dsp.lock() {
             dsp.reset();
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.buffer.lock().unwrap().len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.buffer.lock().unwrap().is_empty()
     }
 
     pub fn target_samples(&self) -> usize {
         self.adaptive_target_samples.load(Ordering::Relaxed)
     }
 
-    pub fn get_peak_level(&self) -> f32 {
-        let cur = self.peak_level.load(Ordering::Relaxed);
-        let decayed = (cur * 85) / 100;
-        self.peak_level.store(decayed, Ordering::Relaxed);
-        (cur as f32 / 32767.0).clamp(0.0, 1.0)
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.ring.len()
     }
 }
 

@@ -67,10 +67,11 @@ import com.owlmic.core.R as Copy
 
 /**
  * The one screen (section 30): header, camera, mic and speaker, status and the connection indicator, in a bento grid
- * with 1 px lines. [onFeature] and [onTryBluetooth] go through the activity, which asks for permissions first.
+ * with 1 px lines. [onFeature] and [onTryBluetooth] go through the activity, which asks for permissions first;
+ * [onTethering] opens the system's tethering settings.
  */
 @Composable
-fun MainScreen(onFeature: (Feature) -> Unit, onTryBluetooth: () -> Unit) {
+fun MainScreen(onFeature: (Feature) -> Unit, onTryBluetooth: () -> Unit, onTethering: () -> Unit) {
     val state by Owlmic.state.collectAsState()
     var sheet by remember { mutableStateOf<String?>(null) }
     var chooser by remember { mutableStateOf(false) }
@@ -105,6 +106,7 @@ fun MainScreen(onFeature: (Feature) -> Unit, onTryBluetooth: () -> Unit) {
                         when {
                             state.connection is Connection.Choosing -> chooser = !chooser
                             state.connection is Connection.Denied -> Owlmic.post(AppMsg.AskAgain)
+                            tethering(state) -> onTethering()
                             state.bluetoothOffer -> onTryBluetooth()
                         }
                     },
@@ -164,7 +166,7 @@ private fun featureText(v: FeatureView): FeatureText = when {
     v.problem == FeatureProblem.NO_BLUETOOTH -> FeatureText(stringResource(Copy.string.camera_no_bluetooth), alert = true)
     v.phase == FeaturePhase.RECOVERING -> FeatureText(stringResource(Copy.string.feature_restarting))
     v.phase == FeaturePhase.PAUSED -> FeatureText(stringResource(Copy.string.feature_paused))
-    v.phase == FeaturePhase.FAILED -> FeatureText(stringResource(Copy.string.feature_off), alert = true)
+    v.phase == FeaturePhase.FAILED -> FeatureText(stringResource(Copy.string.feature_failed), alert = true)
     v.isOn -> FeatureText(stringResource(Copy.string.feature_on))
     else -> FeatureText(stringResource(Copy.string.feature_off))
 }
@@ -232,7 +234,8 @@ private fun SpeakerTile(state: AppState, modifier: Modifier, onTap: () -> Unit) 
 private fun CameraTile(state: AppState, onTap: () -> Unit, onLongPress: () -> Unit) {
     val v = state.camera
     val dim = dimmed(state, v)
-    val live = v.isOn || v.phase == FeaturePhase.PAUSED
+    // Paused for Bluetooth, the camera is off: the tile says why instead of showing a dark preview.
+    val live = (v.isOn || v.phase == FeaturePhase.PAUSED) && v.problem == null
     Tile(Modifier, onTap = onTap.takeUnless { dim }, onLongPress = onLongPress) { fg ->
         if (live) {
             Preview()
@@ -321,51 +324,70 @@ private fun StatusTile(state: AppState, modifier: Modifier, onTap: () -> Unit) {
         is Connection.Waiting -> c.pc
         is Connection.Denied -> c.pc
         is Connection.Busy -> c.pc
+        is Connection.UpdateNeeded -> c.pc
         else -> null
     }
-    val text: AnnotatedString = when {
-        state.adbNeedsAllow -> AnnotatedString(stringResource(Copy.string.adb_allow))
-        else -> when (c) {
-            is Connection.Searching -> AnnotatedString(
-                stringResource(
+    val text: AnnotatedString = when (c) {
+        is Connection.Searching -> AnnotatedString(
+            if (tethering(state)) {
+                stringResource(Copy.string.status_tether_hint)
+            } else {
+                c.unreachable?.let { stringResource(Copy.string.status_cant_reach, it) } ?: stringResource(
                     when (c.stage) {
                         SearchStage.SEARCHING -> Copy.string.status_searching
                         SearchStage.NOT_FOUND -> Copy.string.status_not_found
                         SearchStage.HELP -> Copy.string.status_not_found_help
                     },
-                ),
-            )
-            is Connection.Choosing -> AnnotatedString(stringResource(Copy.string.status_choose, c.count.toString()))
-            is Connection.Connecting -> AnnotatedString(stringResource(Copy.string.link_connecting))
-            is Connection.Approving -> withMono(stringResource(Copy.string.status_approve, c.code), c.code)
-            is Connection.Connected -> AnnotatedString(stringResource(Copy.string.status_connected))
-            is Connection.Reconnecting -> AnnotatedString(stringResource(Copy.string.status_reconnecting))
-            is Connection.Waiting -> AnnotatedString(stringResource(Copy.string.status_waiting, c.pc))
-            is Connection.Denied -> AnnotatedString(stringResource(Copy.string.status_denied, c.pc))
-            is Connection.Busy -> AnnotatedString(stringResource(Copy.string.status_busy, c.pc, c.owner))
-            is Connection.UpdateNeeded -> AnnotatedString(stringResource(Copy.string.status_update, c.pc ?: stringResource(Copy.string.value_phone)))
-        }
+                )
+            },
+        )
+        is Connection.Choosing -> AnnotatedString(stringResource(Copy.string.status_choose, c.count.toString()))
+        is Connection.Connecting -> AnnotatedString(stringResource(Copy.string.link_connecting))
+        is Connection.Approving -> withCode(stringResource(Copy.string.status_approve, c.code), c.code)
+        is Connection.Connected -> AnnotatedString(stringResource(Copy.string.status_connected))
+        is Connection.Reconnecting -> AnnotatedString(stringResource(Copy.string.status_reconnecting))
+        is Connection.Waiting -> AnnotatedString(stringResource(Copy.string.status_waiting, c.pc))
+        is Connection.Denied -> AnnotatedString(stringResource(Copy.string.status_denied, c.pc))
+        is Connection.Busy -> AnnotatedString(stringResource(Copy.string.status_busy, c.pc, c.owner))
+        is Connection.UpdateNeeded -> AnnotatedString(
+            stringResource(Copy.string.status_update, stringResource(if (c.phoneOutdated) Copy.string.device_phone else Copy.string.device_pc)),
+        )
+        is Connection.KeyChanged -> AnnotatedString(stringResource(Copy.string.status_key_changed, c.pc))
     }
-    val offer = state.bluetoothOffer && c is Connection.Searching
+    // One action line at most: the tethering shortcut, or "Try Bluetooth".
+    val action = when {
+        tethering(state) -> stringResource(Copy.string.ui_open_tethering)
+        state.bluetoothOffer && c is Connection.Searching -> stringResource(Copy.string.bt_try)
+        else -> null
+    }
     Tile(modifier, onTap = onTap) {
         Column(Modifier.fillMaxHeight().padding(horizontal = Theme.padding), verticalArrangement = Arrangement.Center) {
-            if (pc != null) BasicText(pc, style = Theme.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!pc.isNullOrEmpty()) BasicText(pc, style = Theme.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicText(
                 text,
                 style = Theme.body.copy(color = Theme.text2),
-                maxLines = if (pc == null && !offer) 2 else 1,
+                maxLines = if (pc.isNullOrEmpty() && action == null) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (offer) BasicText(stringResource(Copy.string.bt_try), style = Theme.body)
+            if (action != null) BasicText(action, style = Theme.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
-/** The approval code in Geist Mono inside its sentence (section 29.3). */
-private fun withMono(text: String, code: String) = buildAnnotatedString {
+/** The tethering hint shows while searching with a cable in and tethering off (section 14.1). */
+private fun tethering(state: AppState) = state.tetherHint && state.connection is Connection.Searching
+
+/** The approval code in Geist Mono at Display size inside its sentence (section 29.3). */
+private fun withCode(text: String, code: String) = buildAnnotatedString {
     append(text)
     val at = text.lastIndexOf(code)
-    if (at >= 0) addStyle(SpanStyle(fontFamily = Theme.mono, color = Theme.text), at, at + code.length)
+    if (at >= 0) {
+        addStyle(
+            SpanStyle(fontFamily = Theme.mono, fontSize = Theme.display.fontSize, fontWeight = Theme.display.fontWeight, color = Theme.text),
+            at,
+            at + code.length,
+        )
+    }
 }
 
 /** Section 36: the colour is the state, the icon is the link. Green is never a dot. */
@@ -375,6 +397,8 @@ private fun Indicator(c: Connection, modifier: Modifier) {
         is Connection.Connecting -> Triple(Theme.yellow, glyphOf(c.link), Copy.string.link_connecting)
         is Connection.Approving -> Triple(Theme.yellow, glyphOf(c.link), Copy.string.link_approval)
         is Connection.Reconnecting -> Triple(Theme.yellow, glyphOf(c.link), Copy.string.status_reconnecting)
+        // Still holding the session for the PC: in between, not lost (section 36).
+        is Connection.Waiting -> Triple(Theme.yellow, Glyph.UNPLUG, Copy.string.status_reconnecting)
         is Connection.Connected -> when {
             c.weak -> Triple(Theme.yellow, glyphOf(c.link), Copy.string.link_weak)
             else -> Triple(

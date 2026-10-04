@@ -4,7 +4,7 @@ use super::JitterBuffer;
 use std::sync::atomic::Ordering;
 
 impl JitterBuffer {
-    /// Noise suppression on or off. Off keeps the strength, so switching back on restores it.
+    /// PC noise reduction on or off.
     pub fn set_ns_enabled(&self, enabled: bool) {
         self.ns_enabled.store(enabled, Ordering::Release);
     }
@@ -13,13 +13,9 @@ impl JitterBuffer {
         self.ns_enabled.load(Ordering::Acquire)
     }
 
-    /// The strength the processing uses: 0 while noise suppression is off.
-    pub(super) fn effective_ns_strength(&self) -> u32 {
-        if self.is_ns_enabled() {
-            self.get_ns_strength()
-        } else {
-            0
-        }
+    /// The strength the processing uses, in percent.
+    pub(super) fn ns_strength(&self) -> u32 {
+        if self.is_ns_enabled() { 100 } else { 0 }
     }
 
     /// The output device's sample rate. The phone's 48 kHz is resampled to it on the way out.

@@ -23,10 +23,11 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
 
     @Volatile private var wireless = true
 
-    @Volatile private var running = false
-
     @Volatile private var reopen = false
 
+    /** Bumped by every start and stop: a playback thread runs only while its own generation is current. */
+    @Volatile private var generation = 0
+    private var running = false
     private var worker: Thread? = null
 
     fun start(format: SpeakerFormat, voiceCommunication: Boolean, wireless: Boolean) {
@@ -35,7 +36,13 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
         configure(format)
         if (running) return
         running = true
-        worker = thread(name = "owlmic-speaker", isDaemon = true) { loop() }
+        val mine = ++generation
+        val previous = worker
+        worker = thread(name = "owlmic-speaker", isDaemon = true) {
+            // The previous thread closes its output first; the caller (the hub thread) never waits for it.
+            previous?.join(STOP_WAIT_MS)
+            loop(mine)
+        }
     }
 
     /** A new STREAM_START (another codec after a link switch). */
@@ -63,21 +70,22 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
         smoother?.push(seq, data)
     }
 
+    /** Returns at once; the playback thread closes its output within one frame. */
     fun stop() {
         running = false
-        worker?.join(1_000)
-        worker = null
+        generation++
         smoother = null
     }
 
-    private fun loop() {
+    private fun loop(mine: Int) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         var handle = 0L
         var decoder: OpusDecoder? = null
         var current: SpeakerFormat? = null
         var pcm = ShortArray(0)
         var healthy: Boolean? = null
-        while (running) {
+        var errors = 0
+        while (generation == mine) {
             val f = format ?: break
             if (reopen || handle == 0L || f != current) {
                 reopen = false
@@ -98,10 +106,24 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
                 }
             }
             val frameSamples = 48 * f.frameMs
-            val s = smoother ?: continue
+            val s = smoother ?: break
             when (val p = s.pull()) {
-                is Smoother.Pull.Frame -> if (decoder != null) decoder.decode(p.data, pcm, frameSamples) else pcmFromBytes(p.data, pcm)
-                is Smoother.Pull.Lost -> if (decoder != null) decoder.conceal(p.next, pcm, frameSamples) else pcm.fill(0)
+                is Smoother.Pull.Frame -> if (decoder == null) {
+                    pcmFromBytes(p.data, pcm)
+                } else if (decoder.decode(p.data, pcm, frameSamples) > 0) {
+                    errors = 0
+                } else {
+                    // A bad packet: conceal it rather than play the last frame again, and after three in a row start
+                    // the decoder afresh (section 14.8, decoder errors).
+                    conceal(decoder, null, pcm, frameSamples)
+                    if (++errors >= MAX_DECODE_ERRORS) {
+                        errors = 0
+                        decoder.close()
+                        decoder = OpusDecoder(f.channels)
+                        if (healthy != false) onHealth(Health.Degraded("speaker decoder restarting")).also { healthy = false }
+                    }
+                }
+                is Smoother.Pull.Lost -> if (decoder != null) conceal(decoder, p.next, pcm, frameSamples) else fadeOut(pcm)
                 Smoother.Pull.Silence -> pcm.fill(0)
             }
             val written = Oboe.write(handle, pcm, frameSamples, WRITE_TIMEOUT_MS)
@@ -117,6 +139,16 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
         decoder?.close()
     }
 
+    private fun conceal(decoder: OpusDecoder, next: ByteArray?, pcm: ShortArray, frameSamples: Int) {
+        if (decoder.conceal(next, pcm, frameSamples) == 0) pcm.fill(0)
+    }
+
+    /** A lost PCM frame: the last one again, fading to silence, so the gap doesn't click. */
+    private fun fadeOut(pcm: ShortArray) {
+        val n = pcm.size
+        for (i in 0 until n) pcm[i] = (pcm[i] * (n - i) / n).toShort()
+    }
+
     private fun pcmFromBytes(data: ByteArray, out: ShortArray) {
         val n = minOf(out.size, data.size / 2)
         for (i in 0 until n) out[i] = ((data[2 * i].toInt() and 0xFF) or (data[2 * i + 1].toInt() shl 8)).toShort()
@@ -125,5 +157,7 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
 
     private companion object {
         const val WRITE_TIMEOUT_MS = 100
+        const val STOP_WAIT_MS = 1_000L
+        const val MAX_DECODE_ERRORS = 3
     }
 }

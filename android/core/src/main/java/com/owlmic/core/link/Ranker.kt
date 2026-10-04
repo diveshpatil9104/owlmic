@@ -45,7 +45,7 @@ sealed interface Decision {
 object Ranker {
     const val REFUSED_FOR_MS = 10 * 60_000L
 
-    /** Best first: the PC used last, other approved PCs (recent first), new PCs, then those that recently said no. */
+    /** Best first: the PC used last, other approved PCs (recent first), new PCs, busy PCs, then those that recently said no. */
     fun order(candidates: List<Candidate>, known: Map<String, PcMemory>, now: Long): List<Candidate> {
         // One entry per PC: its best link.
         val perPc = candidates.groupBy { it.pcId ?: "usb:${it.link}" }.values.map { links -> links.minBy { it.link.ordinal } }
@@ -61,14 +61,15 @@ object Ranker {
 
     /**
      * Connects by itself only to an approved PC, to the PC at the other end of a USB debugging cable, or to a new PC
-     * when it is the only one around. Several new PCs: the user chooses.
+     * when it is the only one around. Several new PCs: the user chooses. When only busy PCs are left, the best of them
+     * is still dialled: its REJECT names the phone that has it, and a held session of this phone resumes.
      */
     fun decide(candidates: List<Candidate>, known: Map<String, PcMemory>, now: Long): Decision {
         val ordered = order(candidates, known, now)
         val first = ordered.firstOrNull() ?: return Decision.Wait
         val last = lastUsedId(known)
         return when (rank(first, known, last, now)) {
-            0, 1, 2 -> if (first.busy && first.link != LinkKind.USB_DEBUGGING) Decision.Wait else Decision.Connect(first)
+            0, 1, 2, BUSY -> Decision.Connect(first)
             3 -> {
                 val fresh = ordered.filter { rank(it, known, last, now) == 3 }
                 if (fresh.size == 1) Decision.Connect(fresh.single()) else Decision.Choose(fresh)
@@ -79,10 +80,14 @@ object Ranker {
 
     private fun lastUsedId(known: Map<String, PcMemory>) = known.values.filter { it.approved }.maxByOrNull { it.lastUsedAt }?.id
 
+    private const val BUSY = 4
+    private const val REFUSED = 5
+
     private fun rank(c: Candidate, known: Map<String, PcMemory>, lastUsed: String?, now: Long): Int {
         if (c.link == LinkKind.USB_DEBUGGING && c.pcId == null) return 0
         val memory = c.pcId?.let { known[it] }
-        if (memory != null && memory.refusedAt > 0 && now - memory.refusedAt < REFUSED_FOR_MS) return 4
+        if (memory != null && memory.refusedAt > 0 && now - memory.refusedAt < REFUSED_FOR_MS) return REFUSED
+        if (c.busy) return BUSY
         return when {
             c.pcId != null && c.pcId == lastUsed -> 1
             memory?.approved == true -> 2

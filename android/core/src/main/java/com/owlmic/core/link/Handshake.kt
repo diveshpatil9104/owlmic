@@ -46,6 +46,9 @@ class Handshake(
 
         data class Rejected(val reason: RejectReason, val owner: String?, val pcId: String?, val pcName: String?, val pcProto: Int?) : Result
 
+        /** A paired PC answered with another key. Never trusted: the user forgets it to pair again. */
+        data class KeyChanged(val pcId: String, val pcName: String) : Result
+
         data class Failed(val why: String) : Result
     }
 
@@ -70,7 +73,7 @@ class Handshake(
                         ack = m
                         ackBytes = incoming.payload
                     }
-                    is Reject -> return Result.Rejected(m.reason, m.owner, null, null, null)
+                    is Reject -> return Result.Rejected(m.reason, m.owner, null, null, m.proto)
                     else -> Unit
                 }
             }
@@ -82,7 +85,7 @@ class Handshake(
             val pcEph = ack.ephPub.fromBase64() ?: return Result.Failed("bad PC key")
             val pcNonce = ack.nonce.fromBase64()?.takeIf { it.size == 32 } ?: return Result.Failed("bad PC nonce")
             val known = remembered(pcId)
-            if (known != null && !known.staticPub.contentEquals(pcStatic)) return Result.Failed("this PC's key changed")
+            if (known != null && !known.staticPub.contentEquals(pcStatic)) return Result.KeyChanged(pcId, ack.name)
 
             val staticShared = identity.agree(pcStatic) ?: return Result.Failed("bad PC key")
             val pairingKey = Crypto.pairingKey(staticShared, phoneId, pcIdBytes)
@@ -130,7 +133,7 @@ class Handshake(
                         ?: return Result.Failed("bad session id")
                     return Result.Welcomed(ack.pcId, ack.name, pcStatic, pairingKey, keys, sessionId, m.settings, m.caps, ack.btAddr, approvedNow)
                 }
-                is Reject -> return Result.Rejected(m.reason, m.owner, ack.pcId, ack.name, ack.proto)
+                is Reject -> return Result.Rejected(m.reason, m.owner, ack.pcId, ack.name, m.proto ?: ack.proto)
                 is Ping -> channel.send(Pong(m.t))
                 else -> Unit
             }

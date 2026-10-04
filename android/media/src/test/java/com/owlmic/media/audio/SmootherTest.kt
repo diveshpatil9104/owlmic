@@ -87,4 +87,16 @@ class SmootherTest {
         assertArrayEquals(frame(0xFF), (s.pull() as Pull.Frame).data)
         assertArrayEquals(frame(0), (s.pull() as Pull.Frame).data)
     }
+
+    @Test
+    fun aPacketTooFarAheadDropsWhatItCannotWaitFor() {
+        pushOnTime(0)
+        pushOnTime(1)
+        s.pull()
+        // A burst after a long stall: 200 frames on, far past what the buffer holds.
+        pushOnTime(201)
+        assertEquals(1, s.buffered())
+        // Everything before it is lost; the gap is concealed until it plays.
+        assertTrue(s.pull() is Pull.Lost)
+    }
 }

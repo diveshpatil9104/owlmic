@@ -15,6 +15,7 @@ class FramesTest {
         assertEquals(vectors.getJSONObject("channelBytes").getInt("media"), Frames.CHANNEL_MEDIA)
         assertEquals(vectors.getInt("maxControlPayload"), Frames.MAX_CONTROL_PAYLOAD)
         assertEquals(vectors.getInt("maxFragmentPayload"), Frames.MAX_FRAGMENT_PAYLOAD)
+        assertEquals(vectors.getInt("maxFragments"), Frames.MAX_FRAGMENTS)
     }
 
     @Test
@@ -49,7 +50,8 @@ class FramesTest {
             assertArrayEquals(hex(v.getString("hex")), h.encode())
             assertEquals(h, FragmentHeader.decode(hex(v.getString("hex"))))
         }
-        assertNull(FragmentHeader.decode(byteArrayOf(0, 0, 2, 2)))
+        assertNull(FragmentHeader.decode(byteArrayOf(0, 0, 0, 2, 0, 2)))
+        assertNull("over MAX_FRAGMENTS", FragmentHeader.decode(byteArrayOf(0, 0, 0, 0, 0x10, 0x01)))
     }
 
     @Test

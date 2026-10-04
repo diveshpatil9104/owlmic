@@ -5,4 +5,4 @@ mod draw;
 mod panel;
 mod tray;
 
-pub use panel::{Ui, Waker, open_running, run};
+pub use panel::{Ui, Waker, open_running, quit_running, run};

@@ -117,7 +117,7 @@ impl MicReceiver {
                     *out = i16::from_le_bytes(*b);
                 }
                 self.jitter.record_arrival(arrival);
-                self.jitter.push_samples(&s.pcm[..n]);
+                self.jitter.push_samples(&mut s.pcm[..n]);
             }
             MicCodec::Opus => {
                 let Some(dec) = s.decoder.as_mut() else {
@@ -127,17 +127,17 @@ impl MicReceiver {
                     let frame = s.last_frame;
                     for _ in 1..lost {
                         let n = dec.decode(None, &mut s.pcm[..frame], false);
-                        self.jitter.push_samples(&s.pcm[..n]);
+                        self.jitter.push_samples(&mut s.pcm[..n]);
                     }
                     // The lost frame right before this one is rebuilt from this packet's redundancy.
                     let n = dec.decode(Some(payload), &mut s.pcm[..frame], true);
-                    self.jitter.push_samples(&s.pcm[..n]);
+                    self.jitter.push_samples(&mut s.pcm[..n]);
                 }
                 let n = dec.decode(Some(payload), &mut s.pcm, false);
                 if n > 0 {
                     s.last_frame = n;
                     self.jitter.record_arrival(arrival);
-                    self.jitter.push_samples(&s.pcm[..n]);
+                    self.jitter.push_samples(&mut s.pcm[..n]);
                 }
             }
         }
@@ -200,6 +200,6 @@ mod tests {
         let jb = Arc::new(JitterBuffer::new());
         let mic = MicReceiver::new(jb.clone());
         mic.packet(1, 0, &[0; 960]);
-        assert!(jb.is_empty());
+        assert_eq!(jb.len(), 0);
     }
 }

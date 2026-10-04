@@ -72,6 +72,31 @@ pub fn open_running() -> bool {
         .is_ok_and(|h| unsafe { PostMessageW(Some(h), WM_APP_OPEN, WPARAM(0), LPARAM(0)) }.is_ok())
 }
 
+/// For `owlmic.exe --quit`: asks the running Owlmic to quit as Quit does, then waits up to
+/// `wait` for its process to end. True once none runs.
+pub fn quit_running(wait: Duration) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    };
+    let Ok(hwnd) = (unsafe { FindWindowW(CLASS, None) }) else {
+        return true;
+    };
+    let mut pid = 0;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    let Ok(process) = (unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) }) else {
+        return false;
+    };
+    let gone = unsafe {
+        PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)).is_ok()
+            && WaitForSingleObject(process, wait.as_millis() as u32) == WAIT_OBJECT_0
+    };
+    unsafe {
+        let _ = CloseHandle(process);
+    }
+    gone
+}
+
 pub struct Ui {
     pub state: Publisher<PanelState>,
     pub preview: Arc<Preview>,
@@ -387,11 +412,13 @@ impl Panel {
                 self.scroll = 0.0;
             }
             Target::Back => self.settings_open = false,
-            _ => match self.state.click(target, &self.rows) {
-                Some(Action::Open(link)) => open(link),
-                Some(action) => (self.ui.on_action)(action),
-                None => {}
-            },
+            _ => {
+                if let Some(link) = self.state.link_at(target, &self.rows) {
+                    open(link);
+                } else if let Some(action) = self.state.click(target, &self.rows) {
+                    (self.ui.on_action)(action);
+                }
+            }
         }
         self.invalidate();
     }

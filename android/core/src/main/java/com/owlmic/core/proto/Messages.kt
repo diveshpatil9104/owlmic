@@ -31,7 +31,7 @@ sealed interface Message {
                     j.optJSONObject("settings")?.let { s -> s.keys().asSequence().associateWith { s.getString(it) } } ?: emptyMap(),
                     j.optJSONArray("caps")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList(),
                 )
-                Kind.REJECT -> Reject(RejectReason.parse(j.getString("reason")), j.optStringOrNull("owner"))
+                Kind.REJECT -> Reject(RejectReason.parse(j.getString("reason")), j.optStringOrNull("owner"), if (j.has("proto")) j.getInt("proto") else null)
                 Kind.PING -> Ping(j.getLong("t"))
                 Kind.PONG -> Pong(j.getLong("t"))
                 Kind.REPORT -> Report(
@@ -146,10 +146,11 @@ data class Welcome(val sessionId: String, val mac: String, val settings: Map<Str
         JSONObject().put("sessionId", sessionId).put("mac", mac).put("settings", JSONObject(settings)).put("caps", JSONArray(caps))
 }
 
-data class Reject(val reason: RejectReason, val owner: String? = null) : Message {
+/** [owner] is the phone that has the PC (busy); [proto] is the PC's own version (version). */
+data class Reject(val reason: RejectReason, val owner: String? = null, val proto: Int? = null) : Message {
     override val kind = Kind.REJECT
 
-    override fun toJson(): JSONObject = JSONObject().put("reason", reason.wire).putIfNotNull("owner", owner)
+    override fun toJson(): JSONObject = JSONObject().put("reason", reason.wire).putIfNotNull("owner", owner).putIfNotNull("proto", proto)
 }
 
 /** [t] is the sender's clock in microseconds; a [Pong] echoes it. */

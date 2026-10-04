@@ -1,8 +1,10 @@
 package com.owlmic.core.settings
 
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -12,7 +14,10 @@ import javax.crypto.spec.GCMParameterSpec
 interface KeyWrapper {
     fun wrap(secret: ByteArray): ByteArray
 
-    /** Null when the blob can't be opened, for example after the Keystore key was lost. */
+    /**
+     * Null when the blob can never be opened again, for example after the Keystore key was lost. Throws when the
+     * Keystore failed this time; trying again later may work, so nothing is thrown away.
+     */
     fun unwrap(blob: ByteArray): ByteArray?
 }
 
@@ -37,16 +42,23 @@ class KeystoreWrapper : KeyWrapper {
         return cipher.iv + cipher.doFinal(secret)
     }
 
-    override fun unwrap(blob: ByteArray): ByteArray? = runCatching {
+    override fun unwrap(blob: ByteArray): ByteArray? = if (blob.size < IV + TAG) null else try {
         Cipher.getInstance(TRANSFORMATION).run {
-            init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, blob.copyOf(12)))
-            doFinal(blob, 12, blob.size - 12)
+            init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG * 8, blob.copyOf(IV)))
+            doFinal(blob, IV, blob.size - IV)
         }
-    }.getOrNull()
+    } catch (_: AEADBadTagException) {
+        // Sealed by a key that no longer exists: Android made a new one.
+        null
+    } catch (_: KeyPermanentlyInvalidatedException) {
+        null
+    }
 
     private companion object {
         const val KEYSTORE = "AndroidKeyStore"
         const val ALIAS = "owlmic-store"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
+        const val IV = 12
+        const val TAG = 16
     }
 }

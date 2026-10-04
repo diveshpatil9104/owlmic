@@ -90,7 +90,8 @@ pub struct PanelState {
     pub version: String,
 }
 
-/// What a click asks the app to do. Opening settings and scrolling stay in the panel.
+/// What a click asks the app to do. Opening settings or a link, and scrolling, stay in the
+/// panel.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Pause(Which),
@@ -101,7 +102,6 @@ pub enum Action {
     Repair,
     RemovePhone(String),
     BlockPhone(String, bool),
-    Open(Link),
     Quit,
 }
 
@@ -260,6 +260,17 @@ impl PanelState {
         rows(self)
     }
 
+    /// The link a settings row opens, which the panel opens itself.
+    pub fn link_at(&self, target: Target, rows: &[Row]) -> Option<Link> {
+        let Target::Row(i, 0) = target else {
+            return None;
+        };
+        match rows.get(i)?.action {
+            RowAction::Open(link) => Some(link),
+            _ => None,
+        }
+    }
+
     /// What a click does. `rows` is the settings list as drawn.
     pub fn click(&self, target: Target, rows: &[Row]) -> Option<Action> {
         let feature = |which, state: Feature| {
@@ -267,6 +278,7 @@ impl PanelState {
         };
         let pairing = |id| self.paired.then_some(Action::Cycle(id));
         match target {
+            Target::Camera => feature(Which::Camera, self.camera),
             Target::Mic => feature(Which::Mic, self.mic),
             Target::Speaker => feature(Which::Speaker, self.speaker),
             Target::Framing => pairing("camera.framing"),
@@ -288,7 +300,6 @@ impl PanelState {
                     (_, 0) if !row.enabled => None,
                     (RowAction::Cycle(id), 0) => Some(Action::Cycle(id)),
                     (RowAction::Repair, 0) => (!self.repairing).then_some(Action::Repair),
-                    (RowAction::Open(link), 0) => Some(Action::Open(*link)),
                     (RowAction::Quit, 0) => Some(Action::Quit),
                     _ => None,
                 }
@@ -491,6 +502,22 @@ mod tests {
         s.mic = Feature::On;
         assert_eq!(s.click(Target::Mic, &[]), Some(Action::Pause(Which::Mic)));
         assert_eq!(
+            s.click(Target::Camera, &[]),
+            None,
+            "the phone hasn't turned it on"
+        );
+        s.camera = Feature::On;
+        assert_eq!(
+            s.click(Target::Camera, &[]),
+            Some(Action::Pause(Which::Camera))
+        );
+        s.camera = Feature::Paused;
+        assert_eq!(
+            s.click(Target::Camera, &[]),
+            Some(Action::Pause(Which::Camera)),
+            "and resumes it"
+        );
+        assert_eq!(
             s.click(Target::Lens, &[]),
             Some(Action::Cycle("camera.lens"))
         );
@@ -524,6 +551,15 @@ mod tests {
             s.click(Target::Row(phone, 1), &rows),
             Some(Action::RemovePhone("01".into()))
         );
+        let website = rows
+            .iter()
+            .position(|r| r.action == RowAction::Open(Link::Website))
+            .unwrap();
+        assert_eq!(
+            s.link_at(Target::Row(website, 0), &rows),
+            Some(Link::Website)
+        );
+        assert_eq!(s.click(Target::Row(website, 0), &rows), None);
         s.paired = false;
         let rows = s.rows();
         let boost = rows

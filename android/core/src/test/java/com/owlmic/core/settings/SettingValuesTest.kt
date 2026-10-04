@@ -54,4 +54,15 @@ class SettingValuesTest {
         assertEquals("1080p", v.getValue("camera.quality").value)
         assertEquals("30", v.getValue("camera.frameRate").value)
     }
+
+    @Test
+    fun theSnapshotLeavesChangesMadeWhileAwayAndTheyGoOutNewest() {
+        val mine = SettingValues.change(base, "camera.lens", "front")
+        val snapshot = listOf(SettingChange("camera.lens", "back", 20), SettingChange("mic.boost", "plus6", 21))
+        val (merged, changed) = SettingValues.applyRemote(mine, snapshot, keep = setOf("camera.lens"))
+        assertEquals("front", merged.getValue("camera.lens").value)
+        assertEquals(setOf("mic.boost"), changed)
+        val bumped = SettingValues.bumpPending(merged, setOf("camera.lens"))
+        assertEquals(Versioned("front", 22), bumped["camera.lens"])
+    }
 }

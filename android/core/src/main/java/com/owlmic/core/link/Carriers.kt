@@ -1,5 +1,6 @@
 package com.owlmic.core.link
 
+import android.net.Network
 import com.owlmic.core.proto.Frames
 import java.io.Closeable
 import java.io.DataInputStream
@@ -19,9 +20,10 @@ interface MediaCarrier : Closeable {
     fun send(packet: ByteArray)
 }
 
-/** UDP 7655 on USB tethering and Wi-Fi. */
-class UdpCarrier(host: InetAddress, port: Int, private val onReceive: (ByteArray, Int) -> Unit) : MediaCarrier {
+/** UDP 7655 on USB tethering and Wi-Fi. [network] is the Wi-Fi network when the PC is on it. */
+class UdpCarrier(host: InetAddress, port: Int, network: Network?, private val onReceive: (ByteArray, Int) -> Unit) : MediaCarrier {
     private val socket = DatagramSocket().apply {
+        network?.bindSocket(this)
         connect(host, port)
         soTimeout = 1_000
     }

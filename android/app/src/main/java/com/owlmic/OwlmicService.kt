@@ -47,7 +47,7 @@ class OwlmicService : Service() {
         super.onCreate()
         notifier = Notifier(this)
         wifi = WifiLatencyLock(this)
-        hub = AppHub(this) { s -> main.post { changed(s) } }
+        hub = AppHub(application) { s -> main.post { changed(s) } }
         Owlmic.hub = hub
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getSystemService(PowerManager::class.java).addThermalStatusListener(mainExecutor, thermalListener)
         getSystemService(AudioManager::class.java).registerAudioDeviceCallback(devices, main)
@@ -59,9 +59,17 @@ class OwlmicService : Service() {
         val feature = intent?.getStringExtra(EXTRA_FEATURE)?.let { Feature.valueOf(it) }
         when (intent?.action) {
             ACTION_OPEN -> hub.post(AppMsg.Opened)
-            ACTION_ON -> if (feature != null) {
+            ACTION_ON -> {
                 // Android 14+ requires the service to be foreground with the feature's type before capture starts.
-                if (enterForeground(inUse(state) + feature)) hub.post(AppMsg.SetFeature(feature, true))
+                when {
+                    feature == null -> keepForegroundPromise()
+                    enterForeground(inUse(state) + feature) -> hub.post(AppMsg.SetFeature(feature, true))
+                    else -> {
+                        // Not allowed with that type now (the permission was taken back): say so in the tile.
+                        hub.post(AppMsg.PermissionMissing(feature))
+                        keepForegroundPromise()
+                    }
+                }
                 // A feature the hub refused (the PC went away meanwhile) changes no state, so check once it has had its say.
                 main.postDelayed(::leaveForegroundIfIdle, IDLE_CHECK_MS)
             }
@@ -78,8 +86,9 @@ class OwlmicService : Service() {
     private fun changed(s: AppState) {
         state = s
         val c = s.connection
-        if (c is Connection.Connected && c.link == LinkKind.WIFI) wifi.hold() else wifi.release()
         val features = inUse(s)
+        // Wi-Fi power save only costs latency while something streams over it.
+        if (c is Connection.Connected && c.link == LinkKind.WIFI && features.isNotEmpty()) wifi.hold() else wifi.release()
         if (features.isEmpty()) {
             leaveForegroundIfIdle()
         } else {
@@ -104,6 +113,24 @@ class OwlmicService : Service() {
             false
         } catch (_: IllegalStateException) {
             false
+        }
+    }
+
+    /**
+     * Every startForegroundService must be followed by startForeground, or Android ends the app. When the feature's own
+     * type is refused, a brief media playback foreground (which needs no permission) keeps the promise, and goes again.
+     */
+    @SuppressLint("InlinedApi")
+    private fun keepForegroundPromise() {
+        if (foreground != null) return
+        runCatching {
+            val notification = notifier.build(state, emptySet())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(Notifier.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(Notifier.ID, notification)
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
         }
     }
 

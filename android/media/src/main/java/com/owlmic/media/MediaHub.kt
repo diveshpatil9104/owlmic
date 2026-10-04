@@ -33,6 +33,9 @@ sealed interface MediaMsg {
 
     /** Step 1 of the recovery ladder: restart [feature] at its source. */
     class Restart(val feature: Feature) : MediaMsg
+
+    /** Android's thermal status changed. */
+    class Thermal(val status: Int) : MediaMsg
 }
 
 sealed interface MediaEvent {
@@ -44,9 +47,9 @@ sealed interface MediaEvent {
 
 /**
  * The Media Hub (section 11.1): starts, stops and reconfigures the mic, camera and speaker pipelines. Media itself
- * flows from the pipelines straight into the [MediaRouter], never through here.
+ * flows from the pipelines straight into the [MediaRouter], never through here. [levelFlow] receives the mic's level,
+ * 0 to 1, every 50 ms while the mic is on, for the level bar.
  */
-/** [level] receives the mic's level, 0 to 1, every 50 ms while the mic is on, for the level bar. */
 class MediaHub(
     context: Context,
     router: MediaRouter,
@@ -70,6 +73,9 @@ class MediaHub(
 
     /** The camera preview tile's surface. Any thread; goes straight to the renderer. */
     fun setPreview(surface: Surface?, width: Int, height: Int) = camera.setPreview(surface, width, height)
+
+    /** The PC's loss reports come every 10 s; a missed one is replaced by the next. */
+    override fun droppable(message: MediaMsg) = message is MediaMsg.MicLoss || message is MediaMsg.CameraReport
 
     override fun handle(message: MediaMsg) {
         when (message) {
@@ -121,9 +127,10 @@ class MediaHub(
             }
             is MediaMsg.Restart -> when (message.feature) {
                 Feature.MIC -> mic.restart()
-                Feature.CAMERA -> camera.requestKeyframe()
+                Feature.CAMERA -> camera.restartEncoder()
                 Feature.SPEAKER -> Unit
             }
+            is MediaMsg.Thermal -> camera.thermal(message.status)
         }
     }
 

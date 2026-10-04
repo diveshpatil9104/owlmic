@@ -6,7 +6,8 @@ import com.owlmic.core.proto.Stream
 interface MediaOut {
     fun audio(stream: Int, timestampUs: Long, data: ByteArray, offset: Int, length: Int)
 
-    fun video(timestampUs: Long, keyframe: Boolean, data: ByteArray, offset: Int, length: Int)
+    /** False when the picture was refused (too big, or the link wore out): the camera lowers its bitrate and starts a keyframe. */
+    fun video(timestampUs: Long, keyframe: Boolean, data: ByteArray, offset: Int, length: Int): Boolean
 }
 
 /** Takes the PC's speaker audio, on a carrier's receive thread. */
@@ -38,12 +39,12 @@ class MediaRouter : MediaOut {
 
     override fun audio(stream: Int, timestampUs: Long, data: ByteArray, offset: Int, length: Int) {
         val p = path ?: return
-        p.carrier.send(p.out.audio(stream, timestampUs, data, offset, length))
+        p.out.audio(stream, timestampUs, data, offset, length)?.let(p.carrier::send)
     }
 
-    override fun video(timestampUs: Long, keyframe: Boolean, data: ByteArray, offset: Int, length: Int) {
-        val p = path ?: return
-        p.out.video(timestampUs, keyframe, data, offset, length) { p.carrier.send(it) }
+    override fun video(timestampUs: Long, keyframe: Boolean, data: ByteArray, offset: Int, length: Int): Boolean {
+        val p = path ?: return true
+        return p.out.video(timestampUs, keyframe, data, offset, length) { p.carrier.send(it) }
     }
 
     /** A packet from [from]'s carrier. */
