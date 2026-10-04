@@ -106,7 +106,10 @@ impl Ring {
         unsafe {
             std::ptr::copy_nonoverlapping(self.slot(latest as usize), out.as_mut_ptr(), FRAME_BYTES)
         };
-        if seq.load(Ordering::Acquire) == before {
+        // The copy's plain loads must complete before the sequence is read again; an acquire
+        // load alone doesn't order loads before it (it matters on ARM64, not on x64).
+        std::sync::atomic::fence(Ordering::Acquire);
+        if seq.load(Ordering::Relaxed) == before {
             Read::Picture
         } else {
             Read::Torn

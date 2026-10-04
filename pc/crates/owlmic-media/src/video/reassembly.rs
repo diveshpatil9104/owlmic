@@ -50,8 +50,8 @@ impl Reassembler {
     pub fn push(
         &mut self,
         frame: u16,
-        index: u8,
-        count: u8,
+        index: u16,
+        count: u16,
         keyframe: bool,
         timestamp_us: u32,
         data: &[u8],

@@ -15,10 +15,14 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use windows::Win32::System::SystemInformation::GetTickCount64;
 
-/// No picture for this long and the camera shows the placeholder.
-const STALE: Duration = Duration::from_secs(2);
+/// While no picture arrives (a held session, say), the last one is written again this often, so
+/// Owlmic Cam keeps showing it rather than its placeholder (SYSTEM_DESIGN section 7.6). The
+/// placeholder comes back when the camera stops: the phone turned it off or the session ended.
+const REPEAT: Duration = Duration::from_secs(1);
 /// The ring exists only while an app has Owlmic Cam open; look for it this often.
 const RETRY_OPEN: Duration = Duration::from_secs(1);
+/// Decoder errors in a row before the stream waits for a keyframe (SYSTEM_DESIGN section 14.8).
+const ERRORS_BEFORE_RESYNC: u32 = 3;
 
 /// What the PC shows, changed live from the panel (SYSTEM_DESIGN section 17.2).
 #[derive(Default)]
@@ -75,7 +79,7 @@ impl Feed {
         }
     }
 
-    /// On Windows 11 the camera falls back by itself when pictures stop.
+    /// On Windows 11 the camera falls back by itself once pictures stop coming.
     fn placeholder(&mut self) {
         if let Feed::Softcam {
             cam, placeholder, ..
@@ -138,24 +142,28 @@ fn run(
         return;
     };
     let mut out = Nv12::black(WIDTH, HEIGHT);
+    let mut has_picture = false;
     let mut last = Instant::now();
     let mut previewed = Instant::now();
-    let mut showing_placeholder = false;
+    let mut errors = 0;
     while !stop.load(Ordering::Acquire) {
-        let Some(frame) = receiver.next_frame(Duration::from_millis(250)) else {
-            if !showing_placeholder && last.elapsed() >= STALE {
-                feed.placeholder();
-                showing_placeholder = true;
+        let Some(next) = receiver.next_frame(Duration::from_millis(250)) else {
+            if has_picture && last.elapsed() >= REPEAT {
+                feed.write(&out);
+                last = Instant::now();
             }
             continue;
         };
-        match decoder.decode(&frame.data) {
+        match decoder.decode(&next.frame.data) {
+            // A newer frame waits behind this one: decode it, but only the newest is shown.
+            Ok(Some(_)) if next.more => errors = 0,
             Ok(Some(picture)) => {
+                errors = 0;
                 let (framing, mirror) = shape.get();
                 picture.shape_into(&mut out, framing, mirror);
                 feed.write(&out);
+                has_picture = true;
                 last = Instant::now();
-                showing_placeholder = false;
                 if preview.wanted()
                     && previewed.elapsed() >= Duration::from_millis(preview::EVERY_MS)
                 {
@@ -163,10 +171,14 @@ fn run(
                     preview.put(|px| out.to_bgra_scaled(preview::WIDTH, preview::HEIGHT, px));
                 }
             }
-            Ok(None) => {}
+            Ok(None) => errors = 0,
             Err(_) => {
-                decoder.flush();
-                receiver.resync();
+                errors += 1;
+                if errors >= ERRORS_BEFORE_RESYNC {
+                    errors = 0;
+                    decoder.flush();
+                    receiver.resync();
+                }
             }
         }
     }

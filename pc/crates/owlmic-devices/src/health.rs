@@ -7,7 +7,7 @@ use crate::audio::{enumerator, find};
 use windows::Win32::Foundation::PROPERTYKEY;
 use windows::Win32::Media::Audio::{
     DEVICE_STATE, EDataFlow, ERole, IMMDeviceEnumerator, IMMNotificationClient,
-    IMMNotificationClient_Impl, eRender,
+    IMMNotificationClient_Impl, eConsole, eRender,
 };
 use windows::core::{PCWSTR, Result, implement};
 
@@ -26,22 +26,28 @@ pub fn check(win11: bool) -> DeviceHealth {
 }
 
 #[implement(IMMNotificationClient)]
-struct Changes(Box<dyn Fn() + Send + Sync>);
+struct Changes {
+    devices: Box<dyn Fn() + Send + Sync>,
+    default_output: Box<dyn Fn() + Send + Sync>,
+}
 
 impl IMMNotificationClient_Impl for Changes_Impl {
     fn OnDeviceStateChanged(&self, _: &PCWSTR, _: DEVICE_STATE) -> Result<()> {
-        (self.0)();
+        (self.devices)();
         Ok(())
     }
     fn OnDeviceAdded(&self, _: &PCWSTR) -> Result<()> {
-        (self.0)();
+        (self.devices)();
         Ok(())
     }
     fn OnDeviceRemoved(&self, _: &PCWSTR) -> Result<()> {
-        (self.0)();
+        (self.devices)();
         Ok(())
     }
-    fn OnDefaultDeviceChanged(&self, _: EDataFlow, _: ERole, _: &PCWSTR) -> Result<()> {
+    fn OnDefaultDeviceChanged(&self, flow: EDataFlow, role: ERole, _: &PCWSTR) -> Result<()> {
+        if flow == eRender && role == eConsole {
+            (self.default_output)();
+        }
         Ok(())
     }
     fn OnPropertyValueChanged(&self, _: &PCWSTR, _: &PROPERTYKEY) -> Result<()> {
@@ -49,15 +55,22 @@ impl IMMNotificationClient_Impl for Changes_Impl {
     }
 }
 
-/// Calls back on audio device changes until dropped.
+/// Calls back on audio device changes, and when the default output moves, until dropped.
 pub struct Watch {
     devices: IMMDeviceEnumerator,
     client: IMMNotificationClient,
 }
 
-pub fn watch(on_change: impl Fn() + Send + Sync + 'static) -> Option<Watch> {
+pub fn watch(
+    on_change: impl Fn() + Send + Sync + 'static,
+    on_default_output: impl Fn() + Send + Sync + 'static,
+) -> Option<Watch> {
     let devices = enumerator().ok()?;
-    let client: IMMNotificationClient = Changes(Box::new(on_change)).into();
+    let client: IMMNotificationClient = Changes {
+        devices: Box::new(on_change),
+        default_output: Box::new(on_default_output),
+    }
+    .into();
     unsafe { devices.RegisterEndpointNotificationCallback(&client).ok()? };
     Some(Watch { devices, client })
 }

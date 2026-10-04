@@ -1,7 +1,7 @@
 //! Keys, proofs and packet sealing (protocol/README.md, sections 5 and 6).
 
-use aes_gcm::aead::{Aead, KeyInit, Payload};
-use aes_gcm::{Aes256Gcm, Nonce};
+use aes_gcm::aead::{Aead, AeadInPlace, KeyInit, Payload};
+use aes_gcm::{Aes256Gcm, Nonce, Tag};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -205,6 +205,41 @@ impl Cipher {
             .decrypt(&Nonce::from(nonce), Payload { msg: sealed, aad })
             .ok()
     }
+
+    /// Seals `packet[aad_len..]` where it is, with `packet[..aad_len]` as additional data, and
+    /// appends the tag: the media path reuses one buffer instead of allocating per packet.
+    pub fn seal_in_place(&self, stream: u8, counter: u64, packet: &mut Vec<u8>, aad_len: usize) {
+        let (aad, body) = packet.split_at_mut(aad_len);
+        let tag = self
+            .aead
+            .encrypt_in_place_detached(&Nonce::from(nonce(stream, counter)), aad, body)
+            .expect("AES-GCM sealing can't fail for these sizes");
+        packet.extend_from_slice(&tag);
+    }
+
+    /// Opens `packet[aad_len..]` (sealed bytes, then the tag) where it is. Returns the length of
+    /// the plaintext, which then starts at `packet[aad_len]`.
+    pub fn open_in_place(
+        &self,
+        stream: u8,
+        counter: u64,
+        packet: &mut [u8],
+        aad_len: usize,
+    ) -> Option<usize> {
+        let len = packet.len().checked_sub(aad_len + 16)?;
+        let (aad, rest) = packet.split_at_mut(aad_len);
+        let (body, tag) = rest.split_at_mut(len);
+        let tag: [u8; 16] = (&*tag).try_into().ok()?;
+        self.aead
+            .decrypt_in_place_detached(
+                &Nonce::from(nonce(stream, counter)),
+                aad,
+                body,
+                &Tag::from(tag),
+            )
+            .ok()?;
+        Some(len)
+    }
 }
 
 /// Accepts each `seq` once and nothing older than the last 64.
@@ -313,8 +348,8 @@ mod tests {
             let sealed = cipher.seal(stream, counter, &aad, &plain);
             assert_eq!(sealed, hex(&c["sealedHex"]), "{}", c["name"]);
             assert_eq!(
-                cipher.open(stream, counter, &aad, &sealed),
-                Some(plain),
+                cipher.open(stream, counter, &aad, &sealed).as_ref(),
+                Some(&plain),
                 "{}",
                 c["name"]
             );
@@ -324,6 +359,12 @@ mod tests {
                 "{}: wrong counter",
                 c["name"]
             );
+            let mut packet = [aad.as_slice(), &plain].concat();
+            cipher.seal_in_place(stream, counter, &mut packet, aad.len());
+            assert_eq!(packet[aad.len()..], sealed, "{}: in place", c["name"]);
+            let len = cipher.open_in_place(stream, counter, &mut packet, aad.len());
+            assert_eq!(len, Some(plain.len()));
+            assert_eq!(packet[aad.len()..aad.len() + plain.len()], plain);
         }
     }
 

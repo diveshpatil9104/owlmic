@@ -8,6 +8,8 @@ use crate::audio::speaker::{CHANNELS, SpeakerCodec, SpeakerSender};
 use crate::video::Framing;
 use crate::video::receiver::VideoReceiver;
 use owlmic_hub::Hub;
+#[cfg(test)]
+use owlmic_proto::messages::Report;
 use owlmic_proto::messages::{FeatureState, Message, State, StreamRef, StreamStart};
 use std::sync::Arc;
 
@@ -282,6 +284,10 @@ impl Hub for MediaHub {
                 self.phone = s;
                 self.update_speaker();
             }
+            MediaMsg::FromPhone(Message::Report(r)) => self
+                .media
+                .speaker
+                .set_loss(r.loss_pct.clamp(0.0, 100.0).round() as u8),
             MediaMsg::FromPhone(Message::RestartStream(s)) if s.stream == STREAM_SPEAKER => {
                 self.speaker_codec = None;
                 self.media.speaker.stop();
@@ -407,6 +413,19 @@ mod tests {
             ev.iter()
                 .any(|e| matches!(e, MediaEvent::ToPhone(Message::StreamStop(s)) if s.stream == 3))
         );
+    }
+
+    #[test]
+    fn the_phones_reported_loss_sets_the_speakers_redundancy() {
+        let (mut h, _) = hub();
+        h.handle(MediaMsg::FromPhone(Message::Report(Report {
+            loss_pct: 12.4,
+            jitter_ms: 3,
+            rtt_ms: 20,
+            kbps: Default::default(),
+            thermal: None,
+        })));
+        assert_eq!(h.media.speaker.loss(), 12);
     }
 
     #[test]

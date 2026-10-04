@@ -13,3 +13,5 @@ pub const DRIFT_GAIN: f32 = 0.004; // speed change per unit of depth error; max 
 pub const DEPTH_AVG_FRAMES: f32 = 24_000.0; // ~0.5 s average of buffer depth for drift correction
 pub const FADE_FRAMES: usize = 120; // 2.5 ms fade into and out of silence, so gaps don't click
 pub const SOFT_CLIP_KNEE: f32 = 0.95; // peaks above this are rounded off, not cut flat
+/// The lock-free ring's size: a power of two, room for about 680 ms, well past MAX_SAMPLES.
+pub(crate) const RING: usize = 1 << 15;

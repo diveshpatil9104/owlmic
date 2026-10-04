@@ -57,6 +57,8 @@ struct State {
     fill: usize,
     packet: Vec<u8>,
     timestamp_us: u32,
+    /// The phone's latest loss, so a new encoder starts with the right amount of FEC.
+    loss: u8,
 }
 
 pub struct SpeakerSender {
@@ -75,6 +77,7 @@ impl SpeakerSender {
                 fill: 0,
                 packet: vec![0; 4000],
                 timestamp_us: 0,
+                loss: 0,
             }),
             out,
         }
@@ -86,6 +89,10 @@ impl SpeakerSender {
             SpeakerCodec::Opus { bitrate, .. } => Encoder::new(CHANNELS, bitrate),
             SpeakerCodec::Pcm => None,
         };
+        let loss = s.loss;
+        if let Some(e) = s.encoder.as_mut() {
+            e.set_loss(loss);
+        }
         s.codec = Some(codec);
         s.fill = 0;
     }
@@ -98,10 +105,18 @@ impl SpeakerSender {
         self.lock().codec.is_some()
     }
 
+    /// The loss the phone reports for the speaker stream: Opus adds as much redundancy.
     pub fn set_loss(&self, pct: u8) {
-        if let Some(e) = self.lock().encoder.as_mut() {
-            e.set_loss(pct);
+        let mut s = self.lock();
+        s.loss = pct.min(100);
+        if let Some(e) = s.encoder.as_mut() {
+            e.set_loss(pct.min(100));
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn loss(&self) -> u8 {
+        self.lock().loss
     }
 
     /// Interleaved stereo at 48 kHz, in any amount; whole frames go out as packets.

@@ -34,6 +34,8 @@ pub enum DeviceMsg {
     /// Check now (at startup, and after a repair).
     Check,
     DevicesChanged,
+    /// The default output moved: Quiet PC speakers follows it.
+    DefaultOutputChanged,
     Repair,
     RepairDone,
     /// Owlmic is quitting: stop everything and unmute, then answer.
@@ -115,8 +117,11 @@ impl DeviceHub {
         }
         self.com = Some(Com::init());
         self.quiet = Some(Quiet::new(self.shared.store.clone()));
-        let me = self.me.clone();
-        self.watch = crate::health::watch(move || me.send(DeviceMsg::DevicesChanged));
+        let (me, me2) = (self.me.clone(), self.me.clone());
+        self.watch = crate::health::watch(
+            move || me.send(DeviceMsg::DevicesChanged),
+            move || me2.send(DeviceMsg::DefaultOutputChanged),
+        );
         if !self.shared.win11 {
             self.softcam = Softcam::load().map(Arc::new);
             if let Some(cam) = &self.softcam {
@@ -231,6 +236,15 @@ impl Hub for DeviceHub {
             DeviceMsg::Shape { framing, mirror } => self.shape.set(framing, mirror),
             DeviceMsg::Check => self.check(),
             DeviceMsg::DevicesChanged => self.check_at = Some(Instant::now() + SETTLE),
+            DeviceMsg::DefaultOutputChanged => {
+                if let Some(q) = self.quiet.as_mut()
+                    && self.capture.is_some()
+                    && self.quiet_on
+                {
+                    q.follow_default();
+                    self.quiet_check_at = Some(Instant::now() + QUIET_CHECK_EVERY);
+                }
+            }
             DeviceMsg::Repair => self.repair(),
             DeviceMsg::Shutdown(done) => {
                 self.mic = None;

@@ -1,15 +1,23 @@
 use super::JitterBuffer;
 use super::constants::*;
-use std::collections::VecDeque;
+use super::ring::Queued;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 impl JitterBuffer {
-    /// Fills the output device's buffer, resampled from the phone's 48 kHz to the device's rate.
+    /// Output side: fills the device's buffer, resampled from the phone's 48 kHz to the device's
+    /// rate. Takes no lock the receive side holds.
     pub fn pop_samples(&self, out: &mut [f32], channels: u16) {
         let ch = channels.max(1) as usize;
-        let mut playout = self.playout.lock().unwrap();
-        let mut buf = self.buffer.lock().unwrap();
+        let mut playout = self.playout.lock().unwrap_or_else(|p| p.into_inner());
+        let (mut buf, flushed) = self.ring.read();
+        if flushed {
+            *playout = Playout::new();
+        }
+        // Past the hard cap the oldest audio goes.
+        if buf.len() > MAX_SAMPLES {
+            buf.skip(buf.len() - MAX_SAMPLES);
+        }
         let target = self.adaptive_target_samples.load(Ordering::Relaxed);
         let step = SAMPLE_RATE as f32 / self.output_rate.load(Ordering::Relaxed) as f32;
 
@@ -62,7 +70,7 @@ impl JitterStats {
 /// `step` is how many 48 kHz samples one output frame advances: 48 kHz over the device's rate.
 /// Drift correction then nudges it by up to MAX_DRIFT_RATIO to hold the buffer at `target`.
 pub(crate) fn drift_resample_pop(
-    buf: &mut VecDeque<i16>,
+    buf: &mut Queued,
     out: &mut [f32],
     channels: usize,
     target: usize,
@@ -109,9 +117,9 @@ pub(crate) fn drift_resample_pop(
             continue;
         }
 
-        let s0 = buf[0] as f32;
-        let s1 = buf.get(1).map_or(s0, |&s| s as f32);
-        let s2 = buf.get(2).map_or(s1, |&s| s as f32);
+        let s0 = buf.get(0).map_or(0.0, |s| s as f32);
+        let s1 = buf.get(1).map_or(s0, |s| s as f32);
+        let s2 = buf.get(2).map_or(s1, |s| s as f32);
         let mut level = 1.0 / 32768.0;
         if play.fade_in > 0 {
             level *= 1.0 - play.fade_in as f32 / FADE_FRAMES as f32;
@@ -151,19 +159,4 @@ pub(crate) fn soft_clip(x: f32) -> f32 {
     }
     let room = 1.0 - SOFT_CLIP_KNEE;
     x.signum() * (SOFT_CLIP_KNEE + room * (over / room).tanh())
-}
-
-pub(crate) fn update_peak_level(peak: &std::sync::atomic::AtomicUsize, samples: &[i16]) {
-    let max_val = samples
-        .iter()
-        .map(|&s| (s as i32).unsigned_abs() as usize)
-        .max()
-        .unwrap_or(0);
-    let cur = peak.load(std::sync::atomic::Ordering::Relaxed);
-    if max_val > cur {
-        peak.store(max_val, std::sync::atomic::Ordering::Release);
-    } else {
-        let decayed = (cur * 92) / 100;
-        peak.store(decayed.max(max_val), std::sync::atomic::Ordering::Release);
-    }
 }

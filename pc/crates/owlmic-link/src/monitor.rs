@@ -109,6 +109,13 @@ impl StreamStats {
         }
     }
 
+    /// The phone numbers each link's packets from zero: after a switch, loss and jitter count
+    /// from the new link's first packet.
+    pub fn new_sequence(&self) {
+        self.highest_seq.store(0, Ordering::Relaxed);
+        self.last_transit_us.store(0, Ordering::Relaxed);
+    }
+
     pub fn reset(&self) {
         for a in [
             &self.packets,
@@ -147,11 +154,12 @@ pub fn report(
             bytes: s.bytes.load(Ordering::Relaxed),
             lost: s.lost.load(Ordering::Relaxed),
         };
+        // Counters start over with a new session, so a mark can be ahead of them.
         let then = marks.insert(*stream, now).unwrap_or_default();
-        got += now.packets - then.packets;
-        lost += now.lost - then.lost;
+        got += now.packets.saturating_sub(then.packets);
+        lost += now.lost.saturating_sub(then.lost);
         jitter = jitter.max(s.jitter_us.load(Ordering::Relaxed) / 1000);
-        let bits = (now.bytes - then.bytes) * 8;
+        let bits = now.bytes.saturating_sub(then.bytes) * 8;
         kbps.insert(
             stream.to_string(),
             (bits as f64 / period.as_secs_f64().max(0.001) / 1000.0).round() as u32,

@@ -44,13 +44,14 @@ impl Switcher {
         if self.active != Some(conn) {
             return None;
         }
-        self.active = self.best(now, false);
+        // Any live link beats none: probation only holds back upgrades.
+        self.active = self.best(now, false, false);
         self.active
     }
 
     /// An upgrade that is due: a better link, healthy for [`STABLE`] and out of probation.
     pub fn upgrade(&mut self, now: Instant) -> Option<u64> {
-        let best = self.best(now, true)?;
+        let best = self.best(now, true, true)?;
         let active_link = self
             .active
             .and_then(|a| self.candidates.get(&a))
@@ -84,14 +85,16 @@ impl Switcher {
         self.candidates.clear();
     }
 
-    fn best(&self, now: Instant, require_stable: bool) -> Option<u64> {
+    fn best(&self, now: Instant, require_stable: bool, probation: bool) -> Option<u64> {
         self.candidates
             .iter()
             .filter(|(_, c)| !require_stable || now.duration_since(c.healthy_since) >= STABLE)
             .filter(|(_, c)| {
-                self.failed
-                    .get(&c.link)
-                    .is_none_or(|t| now.duration_since(*t) >= PROBATION)
+                !probation
+                    || self
+                        .failed
+                        .get(&c.link)
+                        .is_none_or(|t| now.duration_since(*t) >= PROBATION)
             })
             .min_by_key(|(_, c)| c.link)
             .map(|(conn, _)| *conn)
@@ -123,6 +126,15 @@ mod tests {
         s.add(2, WIFI, t);
         assert_eq!(s.remove(1, t + Duration::from_secs(1)), Some(2));
         assert_eq!(s.active(), Some(2));
+    }
+
+    #[test]
+    fn a_dead_link_fails_over_even_to_a_link_of_the_same_kind() {
+        let t = Instant::now();
+        let mut s = Switcher::default();
+        s.add(1, USB, t);
+        s.add(2, USB, t);
+        assert_eq!(s.remove(1, t), Some(2));
     }
 
     #[test]

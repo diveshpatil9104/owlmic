@@ -106,6 +106,20 @@ impl Quiet {
         });
     }
 
+    /// The default output moved while Owlmic had muted the old one: the old one is unmuted
+    /// and the new one muted instead.
+    pub fn follow_default(&mut self) {
+        let Some(m) = self.muted.as_ref() else { return };
+        let new = crate::audio::enumerator()
+            .ok()
+            .and_then(|e| unsafe { e.GetDefaultAudioEndpoint(eRender, eConsole).ok() })
+            .and_then(|d| device_id(&d));
+        if new.is_some_and(|id| id != m.id) {
+            self.release();
+            self.engage();
+        }
+    }
+
     /// Unmutes what Owlmic muted.
     pub fn release(&mut self) {
         if let Some(m) = self.muted.take() {

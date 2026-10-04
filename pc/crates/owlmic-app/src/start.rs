@@ -6,15 +6,15 @@ use crate::app::{AppHub, AppMsg, DeviceCommand, Wiring};
 use crate::sinks::{CameraSink, MicSink};
 use owlmic_devices::dpapi::Dpapi;
 use owlmic_devices::{DeviceEvent, DeviceHub, DeviceMsg, Shared as DeviceShared};
-use owlmic_hub::{Outbox, Publisher, mailbox, spawn_supervised};
-use owlmic_link::answerer::{Answerer, Me};
+use owlmic_hub::{Health, Outbox, Publisher, mailbox, mailbox_with, spawn_supervised, supervise};
+use owlmic_link::answerer::{Answerer, IsApproved, Me};
 use owlmic_link::netinfo::{Adapters, NetInfo};
 use owlmic_link::server::{self, Shared};
-use owlmic_link::{LinkHub, LinkMsg, Routes};
+use owlmic_link::{BtAddr, LinkHub, LinkMsg, Routes};
 use owlmic_media::audio::mic::MicReceiver;
 use owlmic_media::audio::pipeline::JitterBuffer;
 use owlmic_media::audio::speaker::SpeakerSender;
-use owlmic_media::hub::{Media, MediaHub};
+use owlmic_media::hub::{Media, MediaEvent, MediaHub};
 use owlmic_media::video::receiver::VideoReceiver;
 use owlmic_proto::messages::Message;
 use owlmic_session::{Identity, SessionHub, hex};
@@ -23,10 +23,10 @@ use owlmic_settings::store::Store;
 use owlmic_ui::preview::Preview;
 use owlmic_ui::view::PanelState;
 use owlmic_ui::win::{Ui, Waker};
-use std::net::{TcpListener, UdpSocket};
+use std::net::TcpListener;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::NetworkManagement::IpHelper::{
@@ -42,11 +42,20 @@ const TCP_PORT: u16 = 7653;
 const BEACON_PORT: u16 = 7654;
 const MEDIA_PORT: u16 = 7655;
 
+/// The answerer while its socket is bound; announcements go through it.
+type AnswererSlot = Arc<Mutex<Option<Arc<Answerer>>>>;
+
 fn addresses() -> Vec<String> {
     Adapters::networks()
         .iter()
         .map(|n| n.address.to_string())
         .collect()
+}
+
+/// Where a supervised unit's health goes: the App Hub, which turns trouble into a repair.
+fn report(app: &Outbox<AppMsg>, name: &'static str) -> impl Fn(Health) + Send + 'static {
+    let app = app.clone();
+    move |health| app.send(AppMsg::Unit { name, health })
 }
 
 /// Runs Owlmic until Quit. `open` shows the panel once (a launch by hand, not at sign-in).
@@ -61,8 +70,8 @@ pub fn run(open: bool) {
     let store = Arc::new(Store::open(dir.join("owlmic.json"), Box::new(Dpapi)));
     let identity = Arc::new(Identity::load_or_create(&store));
 
-    let (app, app_in) = mailbox::<AppMsg>(512);
-    let (link, link_in) = mailbox::<LinkMsg>(512);
+    let (app, app_in) = mailbox_with(512, AppMsg::droppable);
+    let (link, link_in) = mailbox_with(512, LinkMsg::droppable);
     let (session, session_in) = mailbox(64);
     let (media, media_in) = mailbox(64);
     let (settings, settings_in) = mailbox(64);
@@ -75,9 +84,9 @@ pub fn run(open: bool) {
 
     let jitter = Arc::new(JitterBuffer::new());
     let mic = Arc::new(MicReceiver::new(jitter.clone()));
-    let l = link.clone();
+    let a = app.clone();
     let video = Arc::new(VideoReceiver::new(move || {
-        l.send(LinkMsg::Send(Message::KeyframeRequest))
+        a.send(AppMsg::Media(MediaEvent::ToPhone(Message::KeyframeRequest)))
     }));
     let routes = Arc::new(Routes::new(
         Some(Arc::new(MicSink(mic.clone()))),
@@ -116,6 +125,7 @@ pub fn run(open: bool) {
                 AppHub::new(wiring, store.clone(), panel.clone())
             },
             app_in,
+            |_| {},
         );
     }
     let a = app.clone();
@@ -127,6 +137,7 @@ pub fn run(open: bool) {
             SessionHub::new(s.clone(), move |e| a.send(AppMsg::Session(e)))
         },
         session_in,
+        report(&app, "session"),
     );
     let a = app.clone();
     let s = store.clone();
@@ -137,6 +148,7 @@ pub fn run(open: bool) {
             SettingsHub::new(s.clone(), move |e| a.send(AppMsg::Settings(e)))
         },
         settings_in,
+        report(&app, "settings"),
     );
     let a = app.clone();
     let m = (jitter.clone(), mic.clone(), speaker.clone(), video.clone());
@@ -153,6 +165,7 @@ pub fn run(open: bool) {
             MediaHub::new(media, move |e| a.send(AppMsg::Media(e)))
         },
         media_in,
+        report(&app, "media"),
     );
     let a = app.clone();
     let me = devices.clone();
@@ -162,6 +175,7 @@ pub fn run(open: bool) {
         "devices",
         move || {
             let a = a.clone();
+            a.send(AppMsg::DevicesStarted);
             let shared = DeviceShared {
                 store: d.0.clone(),
                 jitter: d.1.clone(),
@@ -176,6 +190,7 @@ pub fn run(open: bool) {
             })
         },
         devices_in,
+        report(&app, "devices"),
     );
     devices.send(DeviceMsg::Check);
 
@@ -210,7 +225,8 @@ fn device_msg(c: DeviceCommand) -> DeviceMsg {
     }
 }
 
-/// The Transporter's sockets and threads, then the Link Hub with the PC's Bluetooth address.
+/// The Transporter's sockets and threads, each supervised, then the Link Hub. A port another
+/// program holds is retried and shows as a repair meanwhile.
 fn network(
     identity: Arc<Identity>,
     routes: Arc<Routes>,
@@ -221,83 +237,138 @@ fn network(
 ) {
     let net: Arc<dyn NetInfo> = Arc::new(Adapters);
     let busy = Arc::new(AtomicBool::new(false));
+    // A taken media port falls back to a free one; without any, USB debugging and Bluetooth
+    // still work.
+    let udp = match owlmic_link::udp::bind(MEDIA_PORT) {
+        Ok(u) => Some(Arc::new(u)),
+        Err(e) => {
+            app.send(AppMsg::Unit {
+                name: "udp",
+                health: Health::Failed(e.to_string()),
+            });
+            None
+        }
+    };
+    let media_port = udp
+        .as_ref()
+        .and_then(|u| u.local_addr().ok())
+        .map_or(MEDIA_PORT, |a| a.port());
     let me = Me {
         pc_id: identity.pc_id,
         key_hint: identity.key_hint(),
         name: identity.name.clone(),
         tcp_port: TCP_PORT,
-        media_port: MEDIA_PORT,
+        media_port,
     };
-    let approved =
-        move |id: &[u8; 16]| store.read(|d| d.phones.get(&hex(id)).is_some_and(|p| !p.blocked));
-    let answerer = Answerer::bind(BEACON_PORT, me, busy.clone(), approved, net.clone())
-        .ok()
-        .map(Arc::new);
-    let shared = Arc::new(Shared {
-        routes: routes.clone(),
-        to_hub: link.clone(),
-        next_conn: AtomicU64::new(1),
-        net,
+    let shared = Arc::new(Shared::new(routes.clone(), link.clone(), net.clone()));
+
+    let s = shared.clone();
+    supervise(
+        "control listener",
+        move |up| {
+            let listener = TcpListener::bind(("0.0.0.0", TCP_PORT)).map_err(|e| e.to_string())?;
+            up();
+            server::serve(listener, s.clone())
+        },
+        report(&app, "listener"),
+    );
+    if let Some(u) = udp.clone() {
+        let (r, l) = (routes.clone(), link.clone());
+        supervise(
+            "udp media",
+            move |up| {
+                up();
+                owlmic_link::udp::run(&u, &r, &l)
+            },
+            report(&app, "udp"),
+        );
+    }
+    let bt_addr = BtAddr::default();
+    let (s, b) = (shared.clone(), bt_addr.clone());
+    supervise(
+        "bluetooth",
+        move |up| owlmic_link::bt::serve(&s, &b, up),
+        report(&app, "bluetooth"),
+    );
+    supervise("adb", owlmic_link::adb::watch, report(&app, "adb"));
+
+    let a = app.clone();
+    let (b, r) = (busy.clone(), routes.clone());
+    spawn_supervised(
+        "link",
+        move || {
+            let a = a.clone();
+            LinkHub::new(
+                identity.clone(),
+                r.clone(),
+                udp.clone(),
+                b.clone(),
+                move |e| a.send(AppMsg::Link(e)),
+            )
+            .with_bt_addr(bt_addr.clone())
+        },
+        link_in,
+        report(&app, "link"),
+    );
+
+    let approved: IsApproved = Arc::new(move |id: &[u8; 16]| {
+        store.read(|d| d.phones.get(&hex(id)).is_some_and(|p| !p.blocked))
     });
-    if let Ok(listener) = TcpListener::bind(("0.0.0.0", TCP_PORT)) {
-        let s = shared.clone();
-        let _ = std::thread::Builder::new()
-            .name("control listener".into())
-            .spawn(move || server::serve(listener, s));
-    }
-    // A missing UDP socket (port taken) still leaves USB debugging and Bluetooth working.
-    let udp = UdpSocket::bind(("0.0.0.0", MEDIA_PORT))
-        .or_else(|_| UdpSocket::bind(("0.0.0.0", 0)))
-        .map(Arc::new);
-    let Ok(udp) = udp else { return };
-    {
-        let (u, r, l) = (udp.clone(), routes.clone(), link.clone());
-        let _ = std::thread::Builder::new()
-            .name("udp media".into())
-            .spawn(move || owlmic_link::udp::run(u, r, l));
-    }
-    let bt_addr = owlmic_link::bt::start(shared);
-    owlmic_link::adb::start();
-    let mut hub = LinkHub::new(identity, routes, udp, busy, {
-        let a = app.clone();
-        move |e| a.send(AppMsg::Link(e))
-    })
-    .with_bt_addr(bt_addr);
-    if let Some(ans) = &answerer {
-        let a = ans.clone();
-        hub = hub.with_announce(move || a.announce(BEACON_PORT));
-    }
-    // The Link Hub is built once: its connections live in sockets owned by other threads.
-    owlmic_hub::spawn("link", hub, link_in);
-    if let Some(ans) = answerer {
-        ans.announce(BEACON_PORT);
-        let _ = std::thread::Builder::new()
-            .name("answerer".into())
-            .spawn(move || ans.run());
-    }
+    let slot = AnswererSlot::default();
+    let s = slot.clone();
+    supervise(
+        "answerer",
+        move |up| {
+            let a = Answerer::bind(
+                BEACON_PORT,
+                me.clone(),
+                busy.clone(),
+                approved.clone(),
+                net.clone(),
+            )
+            .map_err(|e| e.to_string())?;
+            let a = Arc::new(a);
+            *s.lock().unwrap_or_else(|p| p.into_inner()) = Some(a.clone());
+            up();
+            a.announce(BEACON_PORT);
+            let stopped = a.run();
+            *s.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            stopped
+        },
+        report(&app, "answerer"),
+    );
     app.send(AppMsg::Addresses(addresses()));
-    watch_networks(link, app);
+    watch_networks(slot, app);
+}
+
+/// Three announcements on a short-lived thread, so nothing waits for them.
+fn announce(slot: &AnswererSlot) {
+    if let Some(a) = slot.lock().unwrap_or_else(|p| p.into_inner()).clone() {
+        let _ = std::thread::Builder::new()
+            .name("announce".into())
+            .spawn(move || a.announce(BEACON_PORT));
+    }
 }
 
 /// Joining or leaving a network: announce again, and refresh the addresses the settings show.
-fn watch_networks(link: Outbox<LinkMsg>, app: Outbox<AppMsg>) {
+fn watch_networks(slot: AnswererSlot, app: Outbox<AppMsg>) {
     unsafe extern "system" fn changed(
         context: *const std::ffi::c_void,
         _: *const MIB_IPINTERFACE_ROW,
         _: MIB_NOTIFICATION_TYPE,
     ) {
-        let (link, app) = unsafe { &*(context as *const (Outbox<LinkMsg>, Outbox<AppMsg>)) };
-        link.send(LinkMsg::NetworkChanged);
+        let (slot, app) = unsafe { &*(context as *const (AnswererSlot, Outbox<AppMsg>)) };
+        announce(slot);
         app.send(AppMsg::Addresses(addresses()));
     }
     // Lives as long as the app.
-    let context: &'static (Outbox<LinkMsg>, Outbox<AppMsg>) = Box::leak(Box::new((link, app)));
+    let context: &'static (AnswererSlot, Outbox<AppMsg>) = Box::leak(Box::new((slot, app)));
     let mut handle = HANDLE::default();
     unsafe {
         let _ = NotifyIpInterfaceChange(
             AF_UNSPEC,
             Some(changed),
-            Some((context as *const (Outbox<LinkMsg>, Outbox<AppMsg>)).cast()),
+            Some((context as *const (AnswererSlot, Outbox<AppMsg>)).cast()),
             false,
             &mut handle,
         );

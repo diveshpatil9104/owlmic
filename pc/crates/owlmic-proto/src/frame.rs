@@ -8,6 +8,8 @@ pub const MAX_CONTROL_PAYLOAD: u32 = 1 << 20;
 /// Starts a media packet on a stream carrier; control types are always below it.
 pub const MEDIA_MARKER: u8 = 0x80;
 pub const MAX_FRAGMENT_PAYLOAD: usize = 1200;
+/// The most fragments one picture may have; more is treated as a bad packet.
+pub const MAX_FRAGMENTS: u16 = 4096;
 
 /// Control message types.
 pub mod kind {
@@ -94,27 +96,31 @@ impl MediaHeader {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FragmentHeader {
     pub frame: u16,
-    pub index: u8,
-    pub count: u8,
+    pub index: u16,
+    pub count: u16,
 }
 
 impl FragmentHeader {
-    pub const LEN: usize = 4;
+    pub const LEN: usize = 6;
 
     pub fn encode(&self) -> [u8; Self::LEN] {
-        let f = self.frame.to_be_bytes();
-        [f[0], f[1], self.index, self.count]
+        let (f, i, c) = (
+            self.frame.to_be_bytes(),
+            self.index.to_be_bytes(),
+            self.count.to_be_bytes(),
+        );
+        [f[0], f[1], i[0], i[1], c[0], c[1]]
     }
 
-    /// `None` when the index is outside the count.
+    /// `None` when the index is outside the count or the count is over [`MAX_FRAGMENTS`].
     pub fn decode(buf: &[u8]) -> Option<Self> {
         let b = buf.get(..Self::LEN)?;
         let h = Self {
             frame: u16::from_be_bytes([b[0], b[1]]),
-            index: b[2],
-            count: b[3],
+            index: u16::from_be_bytes([b[2], b[3]]),
+            count: u16::from_be_bytes([b[4], b[5]]),
         };
-        (h.index < h.count).then_some(h)
+        (h.index < h.count && h.count <= MAX_FRAGMENTS).then_some(h)
     }
 }
 
@@ -138,6 +144,7 @@ mod tests {
         assert_eq!(v["channelBytes"]["media"], CHANNEL_MEDIA as u64);
         assert_eq!(v["maxControlPayload"], MAX_CONTROL_PAYLOAD as u64);
         assert_eq!(v["maxFragmentPayload"], MAX_FRAGMENT_PAYLOAD as u64);
+        assert_eq!(v["maxFragments"], MAX_FRAGMENTS as u64);
     }
 
     #[test]
@@ -178,13 +185,18 @@ mod tests {
         for f in v["fragmentHeaders"].as_array().unwrap() {
             let h = FragmentHeader {
                 frame: f["frame"].as_u64().unwrap() as u16,
-                index: f["index"].as_u64().unwrap() as u8,
-                count: f["count"].as_u64().unwrap() as u8,
+                index: f["index"].as_u64().unwrap() as u16,
+                count: f["count"].as_u64().unwrap() as u16,
             };
             assert_eq!(h.encode().to_vec(), hex(&f["hex"]));
             assert_eq!(FragmentHeader::decode(&hex(&f["hex"])), Some(h));
         }
-        assert_eq!(FragmentHeader::decode(&[0, 0, 2, 2]), None);
+        assert_eq!(FragmentHeader::decode(&[0, 0, 0, 2, 0, 2]), None);
+        assert_eq!(
+            FragmentHeader::decode(&[0, 0, 0, 0, 0x10, 0x01]),
+            None,
+            "over MAX_FRAGMENTS"
+        );
     }
 
     #[test]

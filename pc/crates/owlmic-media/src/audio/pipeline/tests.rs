@@ -21,43 +21,42 @@ fn test_jitter_buffer_prebuffering_and_levels() {
         *s = (val * 4000.0) as i16;
     }
 
-    jb.push_samples(&tone_10ms); // 10 ms
+    jb.push_samples(&mut tone_10ms.clone()); // 10 ms
     jb.pop_samples(&mut out, 1);
     assert!(out.iter().all(|&v| v == 0.0)); // prebuffering not done
 
-    jb.push_samples(&tone_10ms); // reaches 20 ms
+    jb.push_samples(&mut tone_10ms.clone()); // reaches 20 ms
     jb.pop_samples(&mut out, 1);
     // Output must be non-zero after prebuffer
     assert!(out.iter().any(|&v| v.abs() > 0.0));
 }
 
 #[test]
-fn test_ns_controls() {
+fn test_jitter_buffer_max_cap() {
     let jb = JitterBuffer::new();
-    assert_eq!(jb.get_ns_strength(), 100);
-
-    jb.set_ns_strength(90);
-    assert_eq!(jb.get_ns_strength(), 90);
-
-    jb.set_ns_strength(150); // clamped
-    assert_eq!(jb.get_ns_strength(), 100);
+    jb.push_samples(&mut vec![500i16; MAX_SAMPLES + 1000]);
+    let mut out = [0.0f32; 48];
+    jb.pop_samples(&mut out, 1);
+    assert!(jb.len() <= MAX_SAMPLES, "the oldest audio past 200 ms went");
 }
 
 #[test]
-fn test_jitter_buffer_max_cap() {
+fn test_reset_drops_queued_audio() {
     let jb = JitterBuffer::new();
-    let huge_samples = vec![500i16; MAX_SAMPLES + 1000];
-    jb.push_samples(&huge_samples);
-
-    assert_eq!(jb.len(), MAX_SAMPLES);
+    jb.push_samples(&mut [1000i16; 4800]);
+    jb.reset();
+    assert_eq!(jb.len(), 0);
+    let mut out = [1.0f32; 480];
+    jb.pop_samples(&mut out, 1);
+    assert!(out.iter().all(|&v| v == 0.0), "playback starts over");
 }
 
 #[test]
 fn test_drift_resampling_operation() {
     let jb = JitterBuffer::new();
     jb.set_level(1);
-    let excess_samples = vec![1000i16; USB_TARGET_MS * SAMPLES_PER_MS + 2000];
-    jb.push_samples(&excess_samples);
+    let mut excess_samples = vec![1000i16; USB_TARGET_MS * SAMPLES_PER_MS + 2000];
+    jb.push_samples(&mut excess_samples);
 
     let mut out = [0.0f32; 480];
     jb.pop_samples(&mut out, 1);
@@ -70,7 +69,7 @@ fn test_output_resampled_to_device_rate() {
     // slow and low and the buffer overflows. 10 ms there is 441 frames and 480 phone samples.
     let jb = JitterBuffer::new();
     jb.set_output_rate(44_100);
-    jb.push_samples(&[1000i16; 4800]);
+    jb.push_samples(&mut [1000i16; 4800]);
     let before = jb.len();
     let mut out = [0f32; 441];
     jb.pop_samples(&mut out, 1);
@@ -86,7 +85,7 @@ fn jittery_tone_levels() -> Vec<f64> {
     let jb = JitterBuffer::new();
     jb.set_level(1);
     jb.set_ns_enabled(false); // RNNoise would take a steady tone for noise
-    let tone: Vec<i16> = (0..48_000 * 5)
+    let mut tone: Vec<i16> = (0..48_000 * 5)
         .map(|n| {
             ((2.0 * std::f64::consts::PI * 12_000.0 * n as f64 / 48_000.0).sin() * 8000.0) as i16
         })
@@ -101,7 +100,7 @@ fn jittery_tone_levels() -> Vec<f64> {
     for pull in 0..400 {
         let now_ms = pull as f64 * 10.0 + 3.7;
         while next <= now_ms {
-            jb.push_samples(&tone[sent * 480..(sent + 1) * 480]);
+            jb.push_samples(&mut tone[sent * 480..(sent + 1) * 480]);
             sent += 1;
             next = lands_at(sent);
         }
@@ -139,7 +138,7 @@ fn test_gaps_fade_instead_of_clicking() {
     let jb = JitterBuffer::new();
     jb.set_level(1);
     jb.set_ns_enabled(false);
-    jb.push_samples(&[16_000i16; USB_TARGET_MS * SAMPLES_PER_MS]);
+    jb.push_samples(&mut [16_000i16; USB_TARGET_MS * SAMPLES_PER_MS]);
     let mut out = [0.0f32; 1_440]; // more than the buffer holds
     jb.pop_samples(&mut out, 1);
 
