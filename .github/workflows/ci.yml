@@ -62,11 +62,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Unit Tests & Lint
+      - name: Unit tests, lint and build
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest lintDebug
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
 
   names:
     name: Product name spelling
