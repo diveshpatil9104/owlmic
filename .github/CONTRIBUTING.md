@@ -1,82 +1,106 @@
 # Contributing to Owlmic
 
-Thanks for helping. Owlmic is being rebuilt from the ground up, so this is a good time to join: small, focused pull requests are the best way in.
+Thanks for contributing to Owlmic! Small, focused pull requests and precise bug reports keep the codebase lean and fast.
 
-By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Ways to help
+---
 
-- **Report a bug:** [open a bug report](https://github.com/diveshpatil9104/owlmic/issues/new?template=bug_report.yml) with steps to reproduce, your phone and Windows version, and how they were connected.
-- **Suggest a feature:** [open a feature request](https://github.com/diveshpatil9104/owlmic/issues/new?template=feature_request.yml).
-- **Pick an issue:** look for [`good first issue`](https://github.com/diveshpatil9104/owlmic/labels/good%20first%20issue) and say in the issue that you are taking it.
-- **Test on your devices:** different phones and PCs find different problems.
+## 1. 10-Minute Setup by Area
 
-## Setup
-
-```bash
-git clone https://github.com/<your-username>/owlmic.git
-cd owlmic
-git submodule update --init
-```
-
-### Windows app (`pc/`)
-
-Needs Windows 10 or 11, [Rust](https://rustup.rs/) stable and the Visual C++ Build Tools.
+### 1.1 Windows PC App (`pc/`)
+**Prerequisites**: Windows 10 (1903+) or Windows 11, [Rust 1.80+](https://rustup.rs/) (stable), Visual Studio C++ Build Tools or GCC.
 
 ```powershell
-cd pc
-cargo build
-cargo fmt --check
+# 1. Clone repo with submodules
+git clone --recurse-submodules https://github.com/diveshpatil9104/owlmic.git
+cd owlmic\pc
+
+# 2. Check compilation and run tests
+cargo test --workspace
+
+# 3. Verify format and clippy lints
+cargo fmt --all --check
 cargo clippy --all-targets -- -D warnings
-cargo test
 ```
+> [!NOTE]
+> Tests that interact with system audio or device registry keys are marked `#[ignore]` and run only when explicitly targeted (`cargo test -- --ignored`).
 
-Tests that change real system state (the registry, audio devices) only run when asked: `cargo test -- --ignored`.
-
-### Android app (`android/`)
-
-Needs Android Studio (or the Android SDK), the NDK and CMake.
+### 1.2 Android App (`android/`)
+**Prerequisites**: JDK 17 (Eclipse Temurin or OpenJDK), Android SDK (API 34+), Android NDK (r26+), CMake 3.22+.
 
 ```bash
-cd android
-./gradlew testDebugUnitTest lintDebug assembleDebug
+# 1. Navigate to android directory
+cd owlmic/android
+
+# 2. Run unit tests and linting
+./gradlew testDebugUnitTest lintDebug
+
+# 3. Build debug APK
+./gradlew assembleDebug
+```
+Output APK is located at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### 1.3 Landing Website (`landing/`)
+**Prerequisites**: Node.js 20+ and npm.
+
+```bash
+# 1. Navigate to landing directory
+cd owlmic/landing
+
+# 2. Install dependencies & run dev server
+npm install
+npm run dev
+
+# 3. Build & lint
+npm run build
+npm run lint
 ```
 
-## Shared sources
+---
 
-Some things are defined once and generated into both apps at build time:
+## 2. Shared Sources (`design/` & `protocol/`)
 
-- **`design/`**: colours and sizes (`tokens.json`), every name and message (`copy.json`) and the settings model (`settings.json`). Change texts and colours here, never by hand inside an app.
-- **`protocol/`**: the phone ↔ PC protocol. Both apps test against the files in `protocol/vectors/`, so a change to the protocol starts with the specification and the vectors.
+To prevent divergence between Windows and Android:
+- **`design/tokens.json`**: Defines all colors, spacing, corner radii, typography, and geometry.
+- **`design/copy.json`**: Contains every user-facing string, message, and name.
+- **`design/settings.json`**: Schema for all shared and local settings.
+- **`protocol/`**: Wire specification and test vectors (`protocol/vectors/*.json`).
 
-## Making a change
+Never hardcode colors, strings, or settings in platform code. Edit the shared JSON files, which are compiled into both apps.
 
-1. **Branch from `main`:** `<type>/<short-description>`, for example `fix/mic-restart` or `feat/speaker-mode`.
-2. **Keep it small:** one topic per pull request.
-3. **Stay lean:** no new dependency without asking first, no speculative code, comments only for the non-obvious why.
-4. **No binaries in git:** `.apk`, `.exe`, `.dll`, `.so` and `.zip` files belong in releases, not the repository.
-5. **Check before pushing:** the commands above pass with no warnings.
+---
 
-## Commit messages
+## 3. How to Pick an Issue
 
-[Conventional Commits](https://www.conventionalcommits.org/), lowercase and imperative:
+1. Check the [Issues](https://github.com/diveshpatil9104/owlmic/issues) tab.
+2. Filter by [`good first issue`](https://github.com/diveshpatil9104/owlmic/labels/good%20first%20issue) or [`help wanted`](https://github.com/diveshpatil9104/owlmic/labels/help%20wanted).
+3. Comment on the issue to express your interest before starting work to avoid collisions.
 
-```
-<type>(<scope>): <short summary>
+---
 
-<why the change was needed>
-```
+## 4. Pull Request Rules & Workflow
 
-Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `chore`. Scopes: `android`, `pc`, `installer`, `ci`.
+1. **Branch Naming**: `<type>/<short-kebab-description>`
+   - `feat/speaker-loopback`
+   - `fix/mic-buffer-underrun`
+   - `docs/clarify-wire-spec`
+2. **Conventional Commits**:
+   ```text
+   <type>(<scope>): <short imperative summary>
 
-Examples: `fix(pc): restart the mic when its stream stalls`, `feat(android): add the speaker tile`.
-
-## Pull requests
-
-- Fill in the template: what changed, why, and how you tested it.
-- UI changes need a screenshot or a short recording; audio and video changes need a note on what you tested and on which devices.
-- CI must be green. A maintainer reviews every pull request.
-
-## Getting help
-
-Ask in [Discussions](https://github.com/diveshpatil9104/owlmic/discussions).
+   [optional body explaining why this change was made]
+   ```
+   - Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `chore`.
+   - Scopes: `android`, `pc`, `proto`, `design`, `installer`, `ci`, `site`.
+   - Example: `fix(pc): prevent audio jitter buffer underflow on rapid link switch`
+3. **Lean Engineering**:
+   - Zero speculative code or premature abstractions.
+   - Surgical diffs: do not reformat lines outside your change scope.
+   - No chatty comments. Comments explain non-obvious *why* and hardware quirks only.
+4. **Strict Binary Ban in Git**:
+   - Never commit compiled binaries (`.apk`, `.exe`, `.dll`, `.so`, `.zip`, `.aab`). Releases are distributed via GitHub Releases and CI artifacts.
+5. **Product Name Spelling**:
+   - The product name is strictly **Owlmic** (or **owlmic** in lowercase contexts, as defined in `design/copy.json`). Capitalizing the second syllable or hyphenating is forbidden.
+6. **Green CI Required**:
+   - All automated GitHub Actions checks (PC tests/clippy, Android tests/lint, product name validation) must pass before merging.
