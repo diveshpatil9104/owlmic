@@ -22,10 +22,8 @@ class MonitorTest {
         assertEquals(Step.SWITCH_LINK, r.stall())
         t += 1_000
         assertEquals(Step.HOLD, r.stall())
-        assertFalse(r.worthTelling())
         t += 1_000
         assertEquals(Step.HOLD, r.stall())
-        assertTrue(r.worthTelling())
     }
 
     @Test
@@ -74,6 +72,38 @@ class MonitorTest {
         t += Monitor.REPORT_EVERY_MS
         val report = m.report(stats, 3)
         assertEquals(3, report!!.thermal)
+    }
+
+    @Test
+    fun aLinkIsWeakWhenAnswersAreLateSlowOrLossy() {
+        val m = Monitor(wireless = true) { t }
+        m.heard()
+        assertFalse(m.weak())
+        t += 2_001
+        assertTrue(m.weak())
+        m.heard()
+        assertFalse(m.weak())
+        m.peerReport(Monitor.WEAK_LOSS_PCT + 1)
+        assertTrue(m.weak())
+        // The next report of our own starts the count again.
+        t += Monitor.REPORT_EVERY_MS
+        m.heard()
+        m.report(InboundStats { t * 1_000 }, null)
+        assertFalse(m.weak())
+    }
+
+    @Test
+    fun theSendersClockWrappingIsNotJitter() {
+        var us = 0L
+        val s = InboundStats { us }
+        // Packets 10 ms apart, on time, across the 32-bit wrap of the PC's microsecond clock.
+        var ts = 0xFFFFFFFFL - 25_000
+        repeat(6) { seq ->
+            us += 10_000
+            s.add(seq.toLong(), ts, 100)
+            ts = (ts + 10_000) and 0xFFFFFFFFL
+        }
+        assertEquals(0, s.take(1_000).second)
     }
 
     @Test

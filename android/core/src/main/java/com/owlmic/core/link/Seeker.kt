@@ -1,5 +1,6 @@
 package com.owlmic.core.link
 
+import android.net.Network
 import com.owlmic.core.hub.LinkKind
 import com.owlmic.core.proto.Answer
 import com.owlmic.core.proto.Probe
@@ -18,12 +19,14 @@ import kotlin.concurrent.thread
 /**
  * Finds PCs (section 14.2): the phone asks, the PC answers. A burst of probes at 0, 100 and 300 ms on every interface,
  * then one a second while searching and one every 2 s while connected (to notice better links). Alongside, it tries
- * the adb tunnel on 127.0.0.1:7653. [onFound] runs on the Seeker's threads.
+ * the adb tunnel on 127.0.0.1:7653. Probes to a PC on the Wi-Fi go out on a socket bound to the Wi-Fi network
+ * ([networkFor]); the rest use Android's normal routing. [onFound] runs on the Seeker's threads.
  */
 class Seeker(
     private val phoneId: ByteArray,
     private val phoneName: () -> String,
     private val manualAddresses: () -> List<String>,
+    private val networkFor: (InetAddress) -> Network?,
     private val onFound: (Candidate) -> Unit,
 ) : Closeable {
     enum class Pace { SEARCHING, CONNECTED, CONNECTED_BY_USB_DEBUGGING }
@@ -38,6 +41,9 @@ class Seeker(
     @Volatile private var tunnelBusy = false
 
     private val resolved = HashMap<String, Pair<InetAddress?, Long>>()
+
+    /** The probe socket bound to the current Wi-Fi network, with its own receive thread. Probe thread only. */
+    @Volatile private var bound: Pair<Network, DatagramSocket>? = null
 
     init {
         thread(name = "owlmic-seeker", isDaemon = true) { probeLoop() }
@@ -98,11 +104,47 @@ class Seeker(
     private fun sendProbes(socket: DatagramSocket) {
         val probe = Probe(phoneId, phoneName()).encode()
         for (nic in probeInterfaces()) {
-            runCatching { socket.send(DatagramPacket(probe, probe.size, nic.broadcast, Proto.PORT_DISCOVERY)) }
+            runCatching { socketFor(nic.address, socket).send(DatagramPacket(probe, probe.size, nic.broadcast, Proto.PORT_DISCOVERY)) }
         }
         for (address in manualAddresses()) {
             val host = resolve(address) ?: continue
-            runCatching { socket.send(DatagramPacket(probe, probe.size, host, Proto.PORT_DISCOVERY)) }
+            runCatching { socketFor(host, socket).send(DatagramPacket(probe, probe.size, host, Proto.PORT_DISCOVERY)) }
+        }
+    }
+
+    /** [plain], or for a destination on the Wi-Fi network a socket bound to it, made when the network changes. */
+    private fun socketFor(destination: InetAddress, plain: DatagramSocket): DatagramSocket {
+        val network = networkFor(destination) ?: return plain
+        bound?.let { (n, s) ->
+            if (n == network && !s.isClosed) return s
+            s.close()
+        }
+        val s = try {
+            DatagramSocket().apply {
+                broadcast = true
+                network.bindSocket(this)
+            }
+        } catch (_: IOException) {
+            bound = null
+            return plain
+        }
+        bound = network to s
+        thread(name = "owlmic-seeker-wifi", isDaemon = true) { receive(s) }
+        return s
+    }
+
+    /** Answers to probes sent on [socket], until it closes. */
+    private fun receive(socket: DatagramSocket) {
+        val buf = ByteArray(1_024)
+        val packet = DatagramPacket(buf, buf.size)
+        while (open && !socket.isClosed) {
+            try {
+                packet.length = buf.size
+                socket.receive(packet)
+                answerFrom(packet)?.let(onFound)
+            } catch (_: IOException) {
+                // Closed: the network went or the Seeker is shutting down.
+            }
         }
     }
 
@@ -157,6 +199,7 @@ class Seeker(
 
     override fun close() {
         open = false
+        bound?.second?.close()
     }
 
     private companion object {

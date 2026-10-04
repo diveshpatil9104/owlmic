@@ -57,9 +57,12 @@ class LinkSession(
         }
     }
 
-    /** Queues [message]. When the queue is full the link is stuck; the oldest message gives way. */
+    /**
+     * Queues [message]. A full queue means the link stopped moving: dropping a STATE or STREAM_START would leave the
+     * two sides disagreeing, so the link closes instead and the Link Hub fails over.
+     */
     fun send(message: Message) {
-        while (!outbox.offer(message)) outbox.poll()
+        if (!outbox.offer(message)) close()
     }
 
     fun close() {

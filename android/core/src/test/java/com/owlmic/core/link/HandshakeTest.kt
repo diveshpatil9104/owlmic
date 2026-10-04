@@ -54,7 +54,8 @@ class HandshakeTest {
             val helloIn = ch.read() as Incoming.Control
             val hello = helloIn.message as Hello
             if (behaviour == Pc.REJECTS_VERSION) {
-                ch.send(Reject(RejectReason.VERSION))
+                // A newer PC turns an older phone away before HELLO_ACK and says which version it speaks.
+                ch.send(Reject(RejectReason.VERSION, proto = Proto.VERSION + 1))
                 return
             }
             val eph = Crypto.generate()
@@ -130,13 +131,15 @@ class HandshakeTest {
     fun aRememberedPcWithAnotherKeyIsRefused() {
         fakePc(Pc.KNOWN)
         val r = phoneRun(remembered = PcKey(Crypto.generate().public, ByteArray(32)))
-        assertEquals(Handshake.Result.Failed("this PC's key changed"), r)
+        assertEquals(Handshake.Result.KeyChanged(pcId.toHex(), "DESKTOP-A"), r)
     }
 
     @Test
     fun versionMismatchesAreReported() {
         fakePc(Pc.REJECTS_VERSION)
-        assertEquals(RejectReason.VERSION, (phoneRun() as Handshake.Result.Rejected).reason)
+        val early = phoneRun() as Handshake.Result.Rejected
+        assertEquals(RejectReason.VERSION, early.reason)
+        assertEquals(Proto.VERSION + 1, early.pcProto)
         fakePc(Pc.NEWER_PROTO)
         val r = phoneRun() as Handshake.Result.Rejected
         assertEquals(Proto.VERSION + 1, r.pcProto)

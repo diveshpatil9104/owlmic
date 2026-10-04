@@ -16,6 +16,9 @@ import com.owlmic.core.R as Copy
 class Notifier(private val service: Service) {
     private val manager = service.getSystemService(NotificationManager::class.java)
 
+    /** The PC the features were last on, for the moments between links when the state names none. */
+    private var lastPc = ""
+
     init {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, service.getString(Copy.string.notification_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -43,8 +46,9 @@ class Notifier(private val service: Service) {
             is Connection.Connected -> c.pc
             is Connection.Reconnecting -> c.pc
             is Connection.Waiting -> c.pc
-            else -> ""
+            else -> lastPc
         }
+        lastPc = pc
         val builder = Notification.Builder(service, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(service.getString(Copy.string.app_name))

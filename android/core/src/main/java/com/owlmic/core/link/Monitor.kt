@@ -25,7 +25,9 @@ class InboundStats(private val nowUs: () -> Long = { System.nanoTime() / 1_000 }
         bytes += size
         val transit = arrival - timestampUs
         if (lastTransit != Long.MIN_VALUE) {
-            val d = kotlin.math.abs(transit - lastTransit).toDouble()
+            // The sender's clock is 32 bits of microseconds and wraps every 71.6 minutes: compare modulo 2^32.
+            var d = (transit - lastTransit) and 0xFFFFFFFFL
+            if (d >= 1L shl 31) d = (1L shl 32) - d
             jitterUs += (d - jitterUs) / 16
         }
         lastTransit = transit
@@ -53,6 +55,7 @@ class InboundStats(private val nowUs: () -> Long = { System.nanoTime() / 1_000 }
 class Monitor(private val wireless: Boolean, private val now: () -> Long = System::currentTimeMillis) {
     private var lastHeard = now()
     private var lastReport = now()
+    private var lossPct = 0.0
     var rttMs = 0
         private set
 
@@ -76,8 +79,20 @@ class Monitor(private val wireless: Boolean, private val now: () -> Long = Syste
         val interval = t - lastReport
         lastReport = t
         val (loss, jitter, kbps) = speaker.take(interval)
+        lossPct = loss
         return Report(loss, jitter, rttMs, if (kbps > 0) mapOf(Stream.SPEAKER.toString() to kbps) else emptyMap(), thermal)
     }
+
+    /** The PC's REPORT: the loss it sees on what the phone sends. */
+    fun peerReport(peerLossPct: Double) {
+        lossPct = maxOf(lossPct, peerLossPct)
+    }
+
+    /**
+     * A link that works but struggles (section 36): an answer more than two heartbeats late, a round trip over
+     * [WEAK_RTT_MS], or more than [WEAK_LOSS_PCT] loss in the last report either way.
+     */
+    fun weak(): Boolean = now() - lastHeard > HEARTBEAT_MS * 2 || rttMs > WEAK_RTT_MS || lossPct > WEAK_LOSS_PCT
 
     companion object {
         const val HEARTBEAT_MS = 1_000L
@@ -85,29 +100,27 @@ class Monitor(private val wireless: Boolean, private val now: () -> Long = Syste
         const val REPORT_EVERY_MS = 10_000L
         const val MISSED_WIRELESS = 3
         const val MISSED_CABLE = 2
+        const val WEAK_RTT_MS = 150
+        const val WEAK_LOSS_PCT = 5.0
 
         fun nowUs() = System.nanoTime() / 1_000
     }
 }
 
 /**
- * The recovery ladder (section 14.8): each stall in an incident takes the next step, once. Five seconds into an
- * incident the user may be told; ten quiet seconds end it. Pure, so it is tested without a network.
+ * The recovery ladder (section 14.8): each stall in an incident takes the next step, once; ten quiet seconds end it.
+ * Pure, so it is tested without a network.
  */
 class Reconnector(private val now: () -> Long = System::currentTimeMillis) {
     enum class Step { RESTART_SOURCE, RECREATE_MEDIA, REHANDSHAKE, SWITCH_LINK, HOLD }
 
-    private var incidentStart = 0L
     private var lastStall = 0L
     private var next = 0
 
     /** The step for a new stall. After [Step.HOLD] it keeps answering [Step.HOLD]. */
     fun stall(): Step {
         val t = now()
-        if (next == 0 || t - lastStall > QUIET_MS) {
-            incidentStart = t
-            next = 0
-        }
+        if (next == 0 || t - lastStall > QUIET_MS) next = 0
         lastStall = t
         val step = Step.entries[minOf(next, Step.entries.lastIndex)]
         next++
@@ -119,11 +132,7 @@ class Reconnector(private val now: () -> Long = System::currentTimeMillis) {
         next = 0
     }
 
-    /** True once an incident has lasted 5 s: time for a short message. */
-    fun worthTelling(): Boolean = next > 0 && now() - incidentStart >= TELL_AFTER_MS
-
     companion object {
-        const val TELL_AFTER_MS = 5_000L
         const val QUIET_MS = 10_000L
     }
 }

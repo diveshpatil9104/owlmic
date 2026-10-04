@@ -4,6 +4,7 @@ import android.view.Surface
 import com.owlmic.core.hub.LinkKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VideoPlanTest {
@@ -99,5 +100,40 @@ class VideoPlanTest {
         assertEquals(Surface.ROTATION_270, surfaceRotationFor(40, Surface.ROTATION_270))
         assertEquals(Surface.ROTATION_0, surfaceRotationFor(20, Surface.ROTATION_270))
         assertEquals(Surface.ROTATION_90, surfaceRotationFor(280, Surface.ROTATION_0))
+    }
+
+    @Test
+    fun heatDrops1080pTo720pOnlyAtCritical() {
+        val p1080 = VideoPlan.of("1080p", 30, LinkKind.USB_TETHERING)
+        assertEquals(p1080, thermalPlan(p1080, 3))
+        val cooler = thermalPlan(p1080, 4)
+        assertEquals(720, cooler.shortSide)
+        assertEquals(30, cooler.fps)
+        assertTrue(cooler.bitrate < p1080.bitrate)
+        val p720 = VideoPlan.of("720p", 30, LinkKind.WIFI)
+        assertEquals(p720, thermalPlan(p720, 6))
+    }
+
+    @Test
+    fun aRefusedPictureHalvesTheBitrateDownToAQuarter() {
+        val b = BitrateController(8_000_000) { 0 }
+        assertEquals(4_000_000, b.refused())
+        assertEquals(2_000_000, b.refused())
+        assertNull(b.refused())
+    }
+
+    /** [fps] camera frames over 3 s, 2 ms early or late in turn, through a gate set to [wanted]. */
+    private fun passed(cameraFps: Int, wanted: Int): Int {
+        val gate = FrameGate()
+        val period = 1_000_000_000L / cameraFps
+        return (0 until cameraFps * 3).count { i -> gate.pass(i * period + if (i % 2 == 0) 2_000_000 else -2_000_000, wanted) }
+    }
+
+    @Test
+    fun theFrameGateKeepsTheWantedRate() {
+        assertTrue(passed(30, 24) in 71..73)
+        assertEquals(90, passed(30, 30))
+        assertTrue(passed(30, 15) in 44..46)
+        assertTrue(passed(60, 30) in 89..91)
     }
 }

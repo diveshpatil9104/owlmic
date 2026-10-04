@@ -1,7 +1,11 @@
 package com.owlmic.hub
 
+import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.audiofx.NoiseSuppressor
+import android.os.BatteryManager
 import android.os.Build
 import android.provider.Settings.Global
 import com.owlmic.Owlmic
@@ -16,11 +20,13 @@ import com.owlmic.core.hub.Hub
 import com.owlmic.core.hub.KnownPcView
 import com.owlmic.core.hub.LinkKind
 import com.owlmic.core.hub.SpeakerOutput
+import com.owlmic.core.hub.worst
 import com.owlmic.core.link.Bluetooth
 import com.owlmic.core.link.LinkEvent
 import com.owlmic.core.link.LinkHub
 import com.owlmic.core.link.LinkMsg
 import com.owlmic.core.link.MediaRouter
+import com.owlmic.core.link.WifiNetwork
 import com.owlmic.core.proto.FeatureState
 import com.owlmic.core.proto.KeyframeRequest
 import com.owlmic.core.proto.Report
@@ -44,11 +50,20 @@ import com.owlmic.media.camera.CameraConfig
 import com.owlmic.media.camera.Lens
 import com.owlmic.media.camera.Orientation
 import com.owlmic.media.camera.VideoPlan
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import com.owlmic.core.proto.Settings as SettingsMessage
 
 sealed interface AppMsg {
+    /** First message: opens the store and starts the Link and Settings hubs, off the main thread. */
+    data object Boot : AppMsg
+
+    /** Once a second: the hubs' health into AppState (section 11.2, rule 4). */
+    data object Tick : AppMsg
+
     /** Turn a feature on or off. The service has already made itself foreground with the right types. */
     class SetFeature(val feature: Feature, val on: Boolean) : AppMsg
 
@@ -85,6 +100,9 @@ sealed interface AppMsg {
 
     class Thermal(val status: Int) : AppMsg
 
+    /** The activity asked Android for [permission]. */
+    class Asked(val permission: String) : AppMsg
+
     class FromLink(val event: LinkEvent) : AppMsg
 
     class FromSettings(val event: SettingsEvent) : AppMsg
@@ -95,27 +113,22 @@ sealed interface AppMsg {
 /**
  * The App Hub (section 11.1): owns the Link, Settings and Media hubs, turns their events into one [AppState], and
  * carries out the feature rules: what turns on when, what pauses during a drop and what comes back (section 7.6).
+ * The store (file and Keystore) opens on the hub thread at [AppMsg.Boot], never on the main thread.
  */
-class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<AppMsg>("app") {
-    private val store = Store(File(context.filesDir, "owlmic.json"), KeystoreWrapper())
+class AppHub(private val app: Application, private val onState: (AppState) -> Unit) : Hub<AppMsg>("app") {
     private val router = MediaRouter()
     private var thermal: Int? = null
 
-    private val link = LinkHub(
-        store, router, Bluetooth(context),
-        phoneName = { phoneName(context) },
-        model = Build.MODEL,
-        sdk = Build.VERSION.SDK_INT,
-        thermal = { thermal },
-        emit = { post(AppMsg.FromLink(it)) },
-    )
-    private val settings = SettingsHub(store) { post(AppMsg.FromSettings(it)) }
-    val media = MediaHub(context, router, Owlmic.mutableLevel) { post(AppMsg.FromMedia(it)) }
+    private lateinit var store: Store
+    private lateinit var link: LinkHub
+    private lateinit var settings: SettingsHub
+    private var booted = false
+    val media = MediaHub(app, router, Owlmic.mutableLevel) { post(AppMsg.FromMedia(it)) }
 
-    private var state = AppState(
-        settings = SettingValues.plain(SettingValues.defaults()),
-        manualAddresses = store.addresses(),
-    )
+    private var state = AppState(settings = SettingValues.plain(SettingValues.defaults()))
+    private var lastPublish = 0L
+    private var publishPending = false
+    private var speakerExpected = false
     private var linkKind: LinkKind? = null
     private var pcId: String? = null
     private var waiting = false
@@ -127,12 +140,50 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
     private var cameraFormat: Triple<Int, Int, Int>? = null
 
     init {
-        knownChanged()
-        publish()
+        post(AppMsg.Boot)
+        scope.launch {
+            while (isActive) {
+                delay(HEALTH_EVERY_MS)
+                post(AppMsg.Tick)
+            }
+        }
     }
 
+    private fun boot() {
+        store = Store(File(app.filesDir, "owlmic.json"), KeystoreWrapper())
+        link = LinkHub(
+            store, router, Bluetooth(app), WifiNetwork(app),
+            phoneName = { phoneName(app) },
+            model = Build.MODEL,
+            sdk = Build.VERSION.SDK_INT,
+            thermal = { thermal },
+            usbPlugged = { usbPlugged(app) },
+            emit = { post(AppMsg.FromLink(it)) },
+        )
+        settings = SettingsHub(store) { post(AppMsg.FromSettings(it)) }
+        booted = true
+        state = state.copy(manualAddresses = store.addresses(), askedPermissions = store.asked())
+        knownChanged()
+    }
+
+    /** A Keystore that failed at boot is tried again with the usual backoff. */
+    override fun restart() {
+        if (!booted) boot()
+    }
+
+    override fun droppable(message: AppMsg) = message == AppMsg.Tick
+
     override fun handle(message: AppMsg) {
+        if (message == AppMsg.Boot) {
+            if (!booted) boot()
+            publish()
+            return
+        }
+        // Until the store opens there is nothing to connect to; the service sees the unchanged state and lets go.
+        if (!booted) return
         when (message) {
+            AppMsg.Boot -> Unit
+            AppMsg.Tick -> state = state.copy(health = worst(listOf(health(), link.health(), settings.health(), media.health())))
             is AppMsg.SetFeature -> setFeature(message.feature, message.on)
             is AppMsg.PermissionMissing -> set(message.feature, FeatureView(FeaturePhase.OFF, FeatureProblem.PERMISSION))
             AppMsg.ToggleMicPause -> when {
@@ -162,11 +213,19 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
             AppMsg.TryBluetooth -> link.post(LinkMsg.TryBluetooth)
             AppMsg.Opened -> link.post(LinkMsg.Opened)
             is AppMsg.Output -> state = state.copy(speakerOutput = message.output)
-            is AppMsg.Thermal -> thermal = message.status
+            is AppMsg.Thermal -> {
+                thermal = message.status
+                media.post(MediaMsg.Thermal(message.status))
+            }
+            is AppMsg.Asked -> {
+                store.markAsked(message.permission)
+                state = state.copy(askedPermissions = store.asked())
+            }
             is AppMsg.FromLink -> fromLink(message.event)
             is AppMsg.FromSettings -> fromSettings(message.event)
             is AppMsg.FromMedia -> fromMedia(message.event)
         }
+        expectSpeaker()
         publish()
     }
 
@@ -191,7 +250,6 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
                 }
                 Feature.SPEAKER -> {
                     set(f, FeatureView(FeaturePhase.STARTING))
-                    link.post(LinkMsg.SpeakerExpected(true))
                     startSpeaker()
                     if (state.mic.isOn) startMic()
                 }
@@ -214,12 +272,23 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
                 }
                 Feature.SPEAKER -> {
                     speakerPausedByPc = false
-                    link.post(LinkMsg.SpeakerExpected(false))
                     media.post(MediaMsg.Speaker(null, false, true))
                 }
             }
         }
         sendState()
+    }
+
+    /**
+     * The Link Hub watches the speaker stream for stalls only while it should be flowing: the Speaker is on, not paused,
+     * and the PC has started its stream (section 17.4).
+     */
+    private fun expectSpeaker() {
+        val expected = booted && state.speaker.isOn && speakerFormat != null
+        if (expected != speakerExpected) {
+            speakerExpected = expected
+            link.post(LinkMsg.SpeakerExpected(expected))
+        }
     }
 
     /** Whoever paused it, the user's resume wins, and the PC hears "on" again. */
@@ -231,6 +300,8 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
                 applyMicPause()
             }
             Feature.CAMERA -> {
+                // Paused because the link is Bluetooth: only an IP link brings it back.
+                if (state.camera.problem == FeatureProblem.NO_BLUETOOTH) return
                 cameraPausedByPc = false
                 media.post(MediaMsg.CameraPaused(false))
             }
@@ -286,6 +357,10 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
         if (state.mic.phase != FeaturePhase.OFF) set(Feature.MIC, FeatureView(if (paused) FeaturePhase.PAUSED else FeaturePhase.ON))
     }
 
+    /** The feature's hardware is in use: not off, not failed, not let go during a long drop or on Bluetooth. */
+    private fun running(v: FeatureView) =
+        v.phase != FeaturePhase.OFF && v.phase != FeaturePhase.FAILED && v.problem != FeatureProblem.NO_BLUETOOTH && !waiting
+
     private fun set(f: Feature, v: FeatureView) {
         state = when (f) {
             Feature.MIC -> state.copy(mic = v)
@@ -316,6 +391,7 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
             }
             is LinkEvent.Choices -> state = state.copy(choices = e.pcs)
             is LinkEvent.BluetoothOffer -> state = state.copy(bluetoothOffer = e.show)
+            is LinkEvent.TetherHint -> state = state.copy(tetherHint = e.show)
             is LinkEvent.Welcomed -> welcomed(e)
             is LinkEvent.Switched -> switched(e.link)
             is LinkEvent.Control -> control(e.message)
@@ -334,7 +410,7 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
                 media.post(MediaMsg.Mic(null))
                 media.post(MediaMsg.Camera(null))
                 media.post(MediaMsg.Speaker(null, false, true))
-                link.post(LinkMsg.SpeakerExpected(false))
+                speakerFormat = null
                 linkKind = null
                 pcId = null
                 settings.post(SettingsMsg.Use(null, false))
@@ -361,41 +437,51 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
         micPausedByPc = false
         cameraPausedByPc = false
         speakerPausedByPc = false
-        // Whatever was on carries on with the PC: after a short drop the pipelines kept running; after a long one they restart.
-        if (state.mic.phase != FeaturePhase.OFF) {
+        // Whatever was on carries on with the PC: after a short drop the pipelines kept running; after a long one they
+        // restart. A pause the PC made ends with the session it was made in; the user's own pause stays.
+        if (state.mic.phase != FeaturePhase.OFF && state.mic.phase != FeaturePhase.FAILED) {
             set(Feature.MIC, FeatureView(if (micPausedByUser) FeaturePhase.PAUSED else FeaturePhase.STARTING))
             startMic()
-            if (micPausedByUser) media.post(MediaMsg.MicPaused(true))
+            media.post(MediaMsg.MicPaused(micPausedByUser))
         }
-        if (state.camera.phase != FeaturePhase.OFF) {
-            if (e.link == LinkKind.BLUETOOTH) {
-                media.post(MediaMsg.Camera(null))
-                set(Feature.CAMERA, FeatureView(FeaturePhase.OFF, FeatureProblem.NO_BLUETOOTH))
-            } else {
-                set(Feature.CAMERA, FeatureView(FeaturePhase.STARTING))
-                media.post(MediaMsg.Camera(cameraConfig()))
-                cameraFormat?.let { (w, h, fps) -> sendCameraFormat(w, h, fps) }
-                media.post(MediaMsg.Keyframe)
-            }
-        }
-        if (state.speaker.phase != FeaturePhase.OFF) {
+        if (state.camera.phase != FeaturePhase.OFF && state.camera.phase != FeaturePhase.FAILED) cameraOnLink(e.link)
+        if (state.speaker.phase != FeaturePhase.OFF && state.speaker.phase != FeaturePhase.FAILED) {
             set(Feature.SPEAKER, FeatureView(FeaturePhase.STARTING))
-            link.post(LinkMsg.SpeakerExpected(true))
             if (bringBack) startSpeaker()
         }
         sendState()
     }
 
+    /**
+     * The camera on a new link: Bluetooth can't carry video, so it pauses there (hardware off, the user's choice kept)
+     * and comes back by itself on the next IP link (section 7.6).
+     */
+    private fun cameraOnLink(to: LinkKind) {
+        if (to == LinkKind.BLUETOOTH) {
+            media.post(MediaMsg.Camera(null))
+            set(Feature.CAMERA, FeatureView(FeaturePhase.PAUSED, FeatureProblem.NO_BLUETOOTH))
+            return
+        }
+        cameraPausedByPc = false
+        set(Feature.CAMERA, FeatureView(FeaturePhase.STARTING))
+        media.post(MediaMsg.CameraPaused(false))
+        media.post(MediaMsg.Camera(cameraConfig()))
+        cameraFormat?.let { (w, h, fps) -> sendCameraFormat(w, h, fps) }
+        media.post(MediaMsg.Keyframe)
+    }
+
     private fun switched(to: LinkKind) {
         linkKind = to
         if (state.mic.isOn || state.mic.phase == FeaturePhase.PAUSED) startMic()
-        if (state.camera.phase != FeaturePhase.OFF) {
-            if (to == LinkKind.BLUETOOTH) {
-                media.post(MediaMsg.Camera(null))
-                set(Feature.CAMERA, FeatureView(FeaturePhase.OFF, FeatureProblem.NO_BLUETOOTH))
-                link.post(LinkMsg.Send(StreamStop(Stream.CAMERA)))
-            } else {
+        val camera = state.camera
+        when {
+            camera.phase == FeaturePhase.OFF || camera.phase == FeaturePhase.FAILED -> Unit
+            to == LinkKind.BLUETOOTH -> cameraOnLink(to)
+            camera.problem == FeatureProblem.NO_BLUETOOTH -> cameraOnLink(to)
+            else -> {
+                // Same picture on a new link: a new encoder only if the plan changed, a keyframe either way.
                 media.post(MediaMsg.Camera(cameraConfig()))
+                cameraFormat?.let { (w, h, fps) -> sendCameraFormat(w, h, fps) }
                 media.post(MediaMsg.Keyframe)
             }
         }
@@ -470,8 +556,8 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
             is SettingsEvent.Values -> {
                 state = state.copy(settings = e.values)
                 val changed = e.changed
-                if (changed.any { it.startsWith("mic.") } && state.mic.phase != FeaturePhase.OFF && !waiting) media.post(MediaMsg.Mic(micConfig()))
-                if (changed.any { it.startsWith("camera.") } && state.camera.phase != FeaturePhase.OFF && !waiting) media.post(MediaMsg.Camera(cameraConfig()))
+                if (changed.any { it.startsWith("mic.") } && running(state.mic)) media.post(MediaMsg.Mic(micConfig()))
+                if (changed.any { it.startsWith("camera.") } && running(state.camera)) media.post(MediaMsg.Camera(cameraConfig()))
                 if (changed.any { it.startsWith("link.") }) {
                     val allowed = LinkKind.entries.filter { k ->
                         state.settings[
@@ -509,7 +595,7 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
                     },
                 )
                 if (e.health is Health.Failed) {
-                    // Given up: let go of the hardware. The tile shows the failure until the user taps it.
+                    // Given up: let go of the hardware. The tile says to tap to try again.
                     when (e.feature) {
                         Feature.MIC -> media.post(MediaMsg.Mic(null))
                         Feature.CAMERA -> media.post(MediaMsg.Camera(null))
@@ -526,7 +612,23 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
         link.post(LinkMsg.Send(StreamStart(Stream.CAMERA, "h264", JSONObject().put("width", w).put("height", h).put("fps", fps))))
     }
 
+    /** At most 60 snapshots a second (section 11.2, rule 7): a burst of changes goes out as its last state. */
     private fun publish() {
+        if (publishPending) return
+        val wait = lastPublish + PUBLISH_EVERY_MS - System.currentTimeMillis()
+        if (wait > 0) {
+            publishPending = true
+            later(wait) {
+                publishPending = false
+                push()
+            }
+        } else {
+            push()
+        }
+    }
+
+    private fun push() {
+        lastPublish = System.currentTimeMillis()
         if (Owlmic.mutableState.value != state) {
             Owlmic.mutableState.value = state
             onState(state)
@@ -534,14 +636,23 @@ class AppHub(context: Context, private val onState: (AppState) -> Unit) : Hub<Ap
     }
 
     override fun close() {
-        link.close()
-        settings.close()
+        if (booted) {
+            link.close()
+            settings.close()
+        }
         media.close()
         super.close()
     }
 
     private companion object {
+        const val HEALTH_EVERY_MS = 1_000L
+        const val PUBLISH_EVERY_MS = 16L
+
         fun phoneName(context: Context): String =
             runCatching { Global.getString(context.contentResolver, Global.DEVICE_NAME) }.getOrNull()?.takeIf { it.isNotBlank() } ?: Build.MODEL
+
+        /** A cable to a computer, not a wall charger: the battery's sticky broadcast says how it charges. */
+        fun usbPlugged(context: Context): Boolean =
+            context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) == BatteryManager.BATTERY_PLUGGED_USB
     }
 }

@@ -21,7 +21,8 @@ enum class SearchStage { SEARCHING, NOT_FOUND, HELP }
 
 /** Where the phone stands with a PC. The status tile and the indicator (section 36) render only this. */
 sealed interface Connection {
-    data class Searching(val stage: SearchStage = SearchStage.SEARCHING) : Connection
+    /** [unreachable] names a PC whose handshakes have failed for 10 s (section 19). */
+    data class Searching(val stage: SearchStage = SearchStage.SEARCHING, val unreachable: String? = null) : Connection
 
     data class Choosing(val count: Int) : Connection
 
@@ -41,8 +42,11 @@ sealed interface Connection {
 
     data class Busy(val pc: String, val owner: String) : Connection
 
-    /** The PC speaks another protocol version. [pc] names the PC when it is the one to update; null means this phone. */
-    data class UpdateNeeded(val pc: String?) : Connection
+    /** The PC speaks another protocol version. [phoneOutdated]: the PC is newer, so this phone needs the update. */
+    data class UpdateNeeded(val pc: String, val phoneOutdated: Boolean) : Connection
+
+    /** A paired PC answered with a different key: it was reinstalled, or it is not the PC it claims to be. */
+    data class KeyChanged(val pc: String) : Connection
 }
 
 enum class FeaturePhase { OFF, STARTING, ON, PAUSED, RECOVERING, FAILED }
@@ -78,8 +82,12 @@ data class AppState(
     val manualAddresses: List<String> = emptyList(),
     /** Show "Try Bluetooth": nothing found for 10 s and the phone has a paired PC. */
     val bluetoothOffer: Boolean = false,
-    /** The phone's USB debugging prompt is waiting for Allow. */
-    val adbNeedsAllow: Boolean = false,
+    /** A USB cable is in, USB tethering is off and no PC is found: offer the tethering settings (section 14.1). */
+    val tetherHint: Boolean = false,
+    /** Permissions Owlmic has asked for at least once, so a refusal for good is told apart from a first ask. */
+    val askedPermissions: Set<String> = emptySet(),
+    /** The worst health the hubs reported in the last second (section 11.2, rule 4). */
+    val health: Health = Health.Ok,
 ) {
     val connected get() = connection is Connection.Connected
 

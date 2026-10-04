@@ -56,6 +56,9 @@ class BitrateController(val start: Int, private val now: () -> Long = System::cu
         return null
     }
 
+    /** A picture too big to send: halve the bitrate at once, never below a quarter of the start. */
+    fun refused(): Int? = change(maxOf(start / 4, current / 2), now()).also { cleanSince = now() }
+
     private fun change(to: Int, t: Long): Int? {
         if (to == current) return null
         current = to
@@ -71,9 +74,37 @@ class BitrateController(val start: Int, private val now: () -> Long = System::cu
 
 /** Frame rate under heat (section 17.2): severe caps at 24, critical and worse at 15. Android's thermal status values. */
 fun thermalFps(wanted: Int, thermalStatus: Int): Int = when {
-    thermalStatus >= 4 -> minOf(wanted, 15)
-    thermalStatus >= 3 -> minOf(wanted, 24)
+    thermalStatus >= THERMAL_CRITICAL -> minOf(wanted, 15)
+    thermalStatus >= THERMAL_SEVERE -> minOf(wanted, 24)
     else -> wanted
+}
+
+/** Quality under heat (section 19, "lower fps, then quality"): at critical, 1080p drops to 720p and its bitrate with it. */
+fun thermalPlan(plan: VideoPlan, thermalStatus: Int): VideoPlan =
+    if (thermalStatus >= THERMAL_CRITICAL && plan.shortSide > 720) plan.copy(longSide = 1280, shortSide = 720, bitrate = plan.bitrate * 2 / 3) else plan
+
+private const val THERMAL_SEVERE = 3
+private const val THERMAL_CRITICAL = 4
+
+/**
+ * Lets camera frames through to the encoder at [FrameGate.pass]'s fps on average: a frame goes when it is due, and the
+ * next is due one period later, so a 30 fps camera feeding a 24 fps stream drops one frame in five. A frame a little
+ * early (up to a quarter period) still goes, which absorbs the camera's timing jitter. GL thread only.
+ */
+class FrameGate {
+    private var due = Long.MIN_VALUE
+
+    fun pass(timestampNs: Long, fps: Int): Boolean {
+        val period = 1_000_000_000L / fps.coerceAtLeast(1)
+        // The first frame, or one after a gap (a pause, a stalled camera): start counting again from here.
+        if (due == Long.MIN_VALUE || timestampNs - due > period) {
+            due = timestampNs + period
+            return true
+        }
+        if (timestampNs < due - period / 4) return false
+        due += period
+        return true
+    }
 }
 
 /** How much of an upright w×h picture to keep, centred, to fill an output of aspect ow:oh. Returns (x scale, y scale), each ≤ 1. */

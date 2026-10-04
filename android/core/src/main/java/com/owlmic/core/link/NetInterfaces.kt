@@ -47,3 +47,10 @@ fun inSubnet(ip: ByteArray, network: ByteArray, prefixLength: Int): Boolean {
     }
     return true
 }
+
+/**
+ * USB tethering is the everyday cable (section 14.1), and Android needs it switched on by hand: offer the shortcut when
+ * a cable to a computer is in, tethering is allowed, and no tethering interface is up.
+ */
+fun tetherHint(usbPlugged: Boolean, tetheringAllowed: Boolean, interfaces: List<NetIf>): Boolean =
+    usbPlugged && tetheringAllowed && interfaces.none { it.kind == LinkKind.USB_TETHERING }

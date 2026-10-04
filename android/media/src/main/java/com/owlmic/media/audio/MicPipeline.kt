@@ -48,7 +48,8 @@ class MicPipeline(
 ) {
     @Volatile private var config: MicConfig? = null
 
-    @Volatile private var running = false
+    /** Bumped by every start and stop: a capture thread runs only while its own generation is current. */
+    @Volatile private var generation = 0
 
     @Volatile private var restartRequested = false
 
@@ -58,13 +59,21 @@ class MicPipeline(
     /** The loss the PC last reported for the mic, for Opus FEC. */
     @Volatile var packetLoss = 0
 
+    private var running = false
     private var worker: Thread? = null
 
     fun start(config: MicConfig) {
         this.config = config
         if (running) return
         running = true
-        worker = thread(name = "owlmic-capture", isDaemon = true) { loop() }
+        val mine = ++generation
+        val previous = worker
+        worker = thread(name = "owlmic-capture", isDaemon = true) {
+            // Android gives the mic to one stream at a time: the previous thread closes its capture first. The caller
+            // (the hub thread) never waits for it.
+            previous?.join(STOP_WAIT_MS)
+            loop(mine)
+        }
     }
 
     /** Picked up at the next frame: a new codec on a link switch, or new processing. */
@@ -77,10 +86,10 @@ class MicPipeline(
         restartRequested = true
     }
 
+    /** Returns at once; the capture thread closes the mic within one read (100 ms). */
     fun stop() {
         running = false
-        worker?.join(1_000)
-        worker = null
+        generation++
     }
 
     private class Capture(val handle: Long, val effects: List<AudioEffect>) {
@@ -103,7 +112,7 @@ class MicPipeline(
         return Capture(handle, effects)
     }
 
-    private fun loop() {
+    private fun loop(mine: Int) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         var cfg = config ?: return
         var capture = open(cfg)
@@ -118,7 +127,7 @@ class MicPipeline(
         var healthy: Boolean? = null
         val meter = LevelMeter()
         var frames = 0
-        while (running) {
+        while (generation == mine) {
             val want = config ?: break
             if (restartRequested || want.voiceCommunication != cfg.voiceCommunication || want.noiseReduction != cfg.noiseReduction) {
                 restartRequested = false
@@ -198,6 +207,7 @@ class MicPipeline(
         const val READ_TIMEOUT_MS = 100
         const val WATCHDOG_MS = 500L
         const val REOPEN_MS = 300L
+        const val STOP_WAIT_MS = 1_000L
 
         /** The level bar updates every 50 ms. */
         const val LEVEL_EVERY = 5

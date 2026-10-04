@@ -1,10 +1,8 @@
 package com.owlmic.media.camera
 
 import android.content.Context
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.PowerManager
 import android.util.Range
 import android.util.Size
 import android.view.OrientationEventListener
@@ -32,7 +30,8 @@ data class CameraConfig(val lens: Lens, val plan: VideoPlan, val orientation: Or
 /**
  * The phone's camera (section 17.2): CameraX into the [GlRenderer], into the [VideoEncoder], into [out]. The phone
  * controls what is sent (lens, size, frame rate, orientation); the PC controls what is shown. [onFormat] reports each
- * new encoded size so a STREAM_START goes out.
+ * new encoded size so a STREAM_START goes out. The camera is bound again only for another lens, a bigger picture or
+ * 60 fps; a smaller plan (a link switch to Wi-Fi, heat) only needs a new encoder, which takes well under 300 ms.
  */
 class CameraPipeline(
     private val context: Context,
@@ -41,14 +40,16 @@ class CameraPipeline(
     private val onHealth: (Health) -> Unit,
 ) {
     private val main = Handler(Looper.getMainLooper())
-    private val power = context.getSystemService(PowerManager::class.java)
 
-    // Main thread, except [config], which the GL thread reads when it builds an encoder.
+    // Main thread, except [config] and [thermal], which the GL thread reads when it builds an encoder.
     @Volatile private var config: CameraConfig? = null
     private var lifecycle: CameraLifecycle? = null
     private var preview: Preview? = null
+
+    /** The plan the camera was bound for: what it captures. */
+    private var captured: VideoPlan? = null
     @Volatile private var rotation = Surface.ROTATION_0
-    private var thermal = 0
+    @Volatile private var thermal = 0
 
     /** Created and dropped on the main thread; read from others only to post onto its GL thread. */
     @Volatile private var renderer: GlRenderer? = null
@@ -76,13 +77,6 @@ class CameraPipeline(
         }
     }
 
-    private val thermalListener = PowerManager.OnThermalStatusChangedListener { status ->
-        main.post {
-            thermal = status
-            post { renderer?.fps = thermalFps(config?.plan?.fps ?: 30, thermal) }
-        }
-    }
-
     /** Starts, or moves to [config] (another lens, size or orientation). Any thread. */
     fun start(config: CameraConfig) {
         main.post { bind(config) }
@@ -93,6 +87,20 @@ class CameraPipeline(
     }
 
     fun requestKeyframe() = post { encoder?.requestKeyframe() }
+
+    /** Step 1 of the recovery ladder (section 14.8): a fresh encoder, which starts with a keyframe. */
+    fun restartEncoder() = post { newEncoder() }
+
+    /** Android's thermal status, from the App Hub: lower the frame rate, then the quality (section 19). Any thread. */
+    fun thermal(status: Int) {
+        val before = thermal
+        thermal = status
+        post {
+            val c = config ?: return@post
+            renderer?.fps = thermalFps(c.plan.fps, status)
+            if (thermalPlan(c.plan, status) != thermalPlan(c.plan, before)) newEncoder()
+        }
+    }
 
     /** The PC's REPORT for the camera stream: adapt the bitrate. */
     fun report(lossPct: Double, rttMs: Int) = post {
@@ -116,13 +124,11 @@ class CameraPipeline(
             lifecycle = it
             it.start()
             orientation.enable()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                thermal = power.currentThermalStatus
-                power.addThermalStatusListener(Executor { main.post(it) }, thermalListener)
-            }
         }
         val r = renderer ?: GlRenderer().also { renderer = it }
-        val needsCamera = previous == null || previous.lens != next.lens || previous.plan != next.plan
+        val capture = captured
+        val needsCamera = previous == null || capture == null || previous.lens != next.lens ||
+            next.plan.shortSide > capture.shortSide || (next.plan.fps > 30) != (capture.fps > 30)
         // A new shape needs a new encoder; another lens only needs a fresh keyframe.
         val needsEncoder = previous == null || previous.plan != next.plan || previous.orientation != next.orientation
         r.handler.post {
@@ -131,6 +137,7 @@ class CameraPipeline(
             previewSurface?.let { (s, w, h) -> r.setPreview(s, w, h) }
         }
         if (!needsCamera) return
+        captured = next.plan
         val ready = ProcessCameraProvider.getInstance(context)
         ready.addListener({
             if (config !== next || lifecycle !== owner) return@addListener
@@ -173,18 +180,31 @@ class CameraPipeline(
             Orientation.PORTRAIT -> false
             Orientation.AUTO -> rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
         }
-        val (w, h) = if (landscape) c.plan.longSide to c.plan.shortSide else c.plan.shortSide to c.plan.longSide
+        val plan = thermalPlan(c.plan, thermal)
+        val (w, h) = if (landscape) plan.longSide to plan.shortSide else plan.shortSide to plan.longSide
         // A rebuilt encoder keeps the adapted bitrate; a new plan starts its own.
-        val rate = bitrate?.takeIf { it.start == c.plan.bitrate } ?: BitrateController(c.plan.bitrate).also { bitrate = it }
+        val rate = bitrate?.takeIf { it.start == plan.bitrate } ?: BitrateController(plan.bitrate).also { bitrate = it }
         val e = runCatching {
-            VideoEncoder(w, h, c.plan.fps, rate.current, onFrame = { pts, key, data, len -> if (!paused) out.video(pts, key, data, 0, len) }, onError = { post(::encoderFailed) })
+            VideoEncoder(
+                w, h, plan.fps, rate.current,
+                onFrame = { pts, key, data, len -> if (!paused && !out.video(pts, key, data, 0, len)) post(::pictureRefused) },
+                onError = { post(::encoderFailed) },
+            )
         }.getOrElse {
             onHealth(Health.Failed("no video encoder"))
             return
         }
         encoder = e
+        r.fps = thermalFps(plan.fps, thermal)
         r.setEncoder(e.inputSurface, w, h)
-        onFormat(w, h, c.plan.fps)
+        onFormat(w, h, plan.fps)
+    }
+
+    /** GL thread: a picture was too big to send, so the PC is missing a frame. Less bitrate, and a keyframe to start over. */
+    private fun pictureRefused() {
+        val e = encoder ?: return
+        bitrate?.refused()?.let(e::setBitrate)
+        e.requestKeyframe()
     }
 
     /** GL thread: MediaCodec reported an error; a new encoder after the usual backoff, until it has failed too often. */
@@ -210,10 +230,10 @@ class CameraPipeline(
         config = null
         runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
         preview = null
+        captured = null
         owner.destroy()
         lifecycle = null
         orientation.disable()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) power.removeThermalStatusListener(thermalListener)
         val r = renderer ?: return
         renderer = null
         r.handler.post {

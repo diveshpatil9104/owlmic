@@ -50,7 +50,7 @@ class GlRenderer {
 
     private var bufferWidth = 0
     private var bufferHeight = 0
-    private var lastEncodedNs = 0L
+    private val gate = FrameGate()
     private val texMatrix = FloatArray(16)
     private val uvMatrix = FloatArray(16)
     private val scratch = FloatArray(16)
@@ -148,8 +148,7 @@ class GlRenderer {
         st.getTransformMatrix(texMatrix)
         val ts = st.timestamp
         val upright = if (rotation % 180 == 0) bufferWidth to bufferHeight else bufferHeight to bufferWidth
-        if (encoder != EGL14.EGL_NO_SURFACE && ts - lastEncodedNs >= 800_000_000L / fps.coerceAtLeast(1)) {
-            lastEncodedNs = ts
+        if (encoder != EGL14.EGL_NO_SURFACE && gate.pass(ts, fps)) {
             EGL14.eglMakeCurrent(display, encoder, encoder, context)
             draw(upright.first, upright.second, encoderWidth, encoderHeight, 0, 0, encoderWidth, encoderHeight)
             EGLExt.eglPresentationTimeANDROID(display, encoder, ts)

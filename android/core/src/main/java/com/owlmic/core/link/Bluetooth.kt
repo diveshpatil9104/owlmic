@@ -30,13 +30,25 @@ class Bluetooth(private val context: Context) {
         }
     }
 
-    /** Blocks up to the stack's own timeout (about 12 s). Close the socket from another thread to give up early. */
+    /**
+     * Dials the PC's RFCOMM service. The stack's own timeout is about 12 s, which would hold up every other dial, so
+     * the socket is closed after [timeoutMs] and the dial fails then.
+     */
     @SuppressLint("MissingPermission") // Checked by permitted() first; a revoked permission throws SecurityException to the caller.
-    fun connect(address: String): BluetoothSocket {
+    fun connect(address: String, timeoutMs: Long): BluetoothSocket {
         check(permitted()) { "no Bluetooth permission" }
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: error("no Bluetooth")
         val socket = adapter.getRemoteDevice(address).createRfcommSocketToServiceRecord(SERVICE)
-        socket.connect()
+        val deadline = Watchdog.on(socket)
+        deadline.arm(timeoutMs)
+        try {
+            socket.connect()
+        } catch (e: Exception) {
+            runCatching { socket.close() }
+            throw e
+        } finally {
+            deadline.cancel()
+        }
         return socket
     }
 

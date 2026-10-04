@@ -12,6 +12,9 @@ object Frames {
     const val MEDIA_MARKER = 0x80
     const val MAX_FRAGMENT_PAYLOAD = 1200
 
+    /** The most fragments one picture may have; more is treated as a bad packet. */
+    const val MAX_FRAGMENTS = 4096
+
     /** Appends [packet] the way stream carriers send it: the media marker and a 2-byte length. */
     fun wrapForStream(packet: ByteArray): ByteArray {
         require(packet.size <= 0xFFFF) { "media packets fit in 64 KiB" }
@@ -64,11 +67,14 @@ data class ControlHeader(val kind: Int, val length: Int) {
 }
 
 data class MediaHeader(val stream: Int, val keyframe: Boolean, val seq: Long, val timestampUs: Long) {
-    fun encode() = byteArrayOf(
-        stream.toByte(), (if (keyframe) 1 else 0).toByte(),
-        (seq shr 24).toByte(), (seq shr 16).toByte(), (seq shr 8).toByte(), seq.toByte(),
-        (timestampUs shr 24).toByte(), (timestampUs shr 16).toByte(), (timestampUs shr 8).toByte(), timestampUs.toByte(),
-    )
+    fun encode() = ByteArray(LEN).also { encodeInto(it) }
+
+    fun encodeInto(out: ByteArray, at: Int = 0) {
+        out[at] = stream.toByte()
+        out[at + 1] = (if (keyframe) 1 else 0).toByte()
+        out.put32(at + 2, seq)
+        out.put32(at + 6, timestampUs)
+    }
 
     companion object {
         const val LEN = 10
@@ -81,16 +87,34 @@ data class MediaHeader(val stream: Int, val keyframe: Boolean, val seq: Long, va
 }
 
 data class FragmentHeader(val frame: Int, val index: Int, val count: Int) {
-    fun encode() = byteArrayOf((frame shr 8).toByte(), frame.toByte(), index.toByte(), count.toByte())
+    fun encode() = ByteArray(LEN).also { encodeInto(it) }
+
+    fun encodeInto(out: ByteArray, at: Int = 0) {
+        out.put16(at, frame)
+        out.put16(at + 2, index)
+        out.put16(at + 4, count)
+    }
 
     companion object {
-        const val LEN = 4
+        const val LEN = 6
 
-        /** Null when the index is outside the count. */
+        /** Null when the index is outside the count or the count is over [Frames.MAX_FRAGMENTS]. */
         fun decode(b: ByteArray, length: Int = b.size): FragmentHeader? {
             if (length < LEN) return null
-            val h = FragmentHeader(b.u16(0), b[2].toInt() and 0xFF, b[3].toInt() and 0xFF)
-            return if (h.index < h.count) h else null
+            val h = FragmentHeader(b.u16(0), b.u16(2), b.u16(4))
+            return if (h.index < h.count && h.count <= Frames.MAX_FRAGMENTS) h else null
         }
     }
+}
+
+private fun ByteArray.put16(at: Int, v: Int) {
+    this[at] = (v shr 8).toByte()
+    this[at + 1] = v.toByte()
+}
+
+private fun ByteArray.put32(at: Int, v: Long) {
+    this[at] = (v shr 24).toByte()
+    this[at + 1] = (v shr 16).toByte()
+    this[at + 2] = (v shr 8).toByte()
+    this[at + 3] = v.toByte()
 }

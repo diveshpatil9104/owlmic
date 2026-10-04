@@ -23,12 +23,15 @@ object SettingValues {
         return values + (id to Versioned(value, version))
     }
 
-    /** The PC's changes: a shared setting moves when the change is at least as new as ours. Returns the new map and what changed. */
-    fun applyRemote(values: Map<String, Versioned>, changes: List<SettingChange>): Pair<Map<String, Versioned>, Set<String>> {
+    /**
+     * The PC's changes: a shared setting moves when the change is at least as new as ours, except those in [keep].
+     * Returns the new map and what changed.
+     */
+    fun applyRemote(values: Map<String, Versioned>, changes: List<SettingChange>, keep: Set<String> = emptySet()): Pair<Map<String, Versioned>, Set<String>> {
         val out = values.toMutableMap()
         val changed = mutableSetOf<String>()
         for (c in changes) {
-            if (!isShared(c.id) || !isValid(c.id, c.value)) continue
+            if (!isShared(c.id) || !isValid(c.id, c.value) || c.id in keep) continue
             val mine = out[c.id]
             if (mine == null || c.version >= mine.version) {
                 if (mine?.value != c.value) changed += c.id
@@ -40,7 +43,7 @@ object SettingValues {
 
     /**
      * WELCOME's settings carry no versions, so the PC's value stands for every shared setting except those the phone
-     * changed while away ([pending]); those go back to the PC as SETTINGS.
+     * changed while away ([pending]); the versions follow in the PC's SETTINGS snapshot.
      */
     fun applyWelcome(values: Map<String, Versioned>, pcValues: Map<String, String>, pending: Set<String>): Map<String, Versioned> {
         val out = values.toMutableMap()
@@ -49,6 +52,15 @@ object SettingValues {
             out[id] = Versioned(value, out[id]?.version ?: 0)
         }
         return out
+    }
+
+    /**
+     * The phone's changes made while away, versioned past everything either side has seen, so the PC takes them: the
+     * user made them last, on the phone.
+     */
+    fun bumpPending(values: Map<String, Versioned>, pending: Set<String>): Map<String, Versioned> {
+        var version = values.values.maxOfOrNull { it.version } ?: 0
+        return values + pending.mapNotNull { id -> values[id]?.let { id to it.copy(version = ++version) } }
     }
 
     fun plain(values: Map<String, Versioned>) = values.mapValues { it.value.value }

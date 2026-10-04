@@ -87,21 +87,41 @@ object Crypto {
 
     fun carrierMac(auth: ByteArray, sessionId: ByteArray): ByteArray = hmac(auth, "carrier".toByteArray() + sessionId).copyOf(16)
 
-    /** AES-256-GCM for one direction of a session. */
+    /** The length of the GCM tag after every sealed payload. */
+    const val TAG = 16
+
+    /** AES-256-GCM for one direction of a session. Safe from several threads: each has its own cipher. */
     class Sealing(key: ByteArray) {
         private val key = SecretKeySpec(key, "AES")
 
+        /** Looking a cipher up costs more than using it, so each thread keeps one for every packet it seals or opens. */
+        private val ciphers: ThreadLocal<Cipher> = ThreadLocal.withInitial { Cipher.getInstance("AES/GCM/NoPadding") }
+
         /** [plaintext] sealed with its 16-byte tag appended. [counter] is the packet's seq, or the control counter. */
-        fun seal(stream: Int, counter: Long, aad: ByteArray, plaintext: ByteArray): ByteArray = cipher(Cipher.ENCRYPT_MODE, stream, counter, aad)
+        fun seal(stream: Int, counter: Long, aad: ByteArray, plaintext: ByteArray): ByteArray = cipher(Cipher.ENCRYPT_MODE, stream, counter, aad, 0, aad.size)
             .doFinal(plaintext)
 
-        fun open(stream: Int, counter: Long, aad: ByteArray, sealed: ByteArray): ByteArray? =
-            runCatching { cipher(Cipher.DECRYPT_MODE, stream, counter, aad).doFinal(sealed) }.getOrNull()
-
-        private fun cipher(mode: Int, stream: Int, counter: Long, aad: ByteArray) = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(mode, key, GCMParameterSpec(128, nonce(stream, counter)))
-            updateAAD(aad)
+        /**
+         * Seals [packet]'s body in place: the first [aadLength] bytes are the additional data, the [bodyLength] bytes
+         * after them are encrypted where they lie, and the tag follows, so [packet] needs [TAG] spare bytes at the end.
+         */
+        fun sealInPlace(stream: Int, counter: Long, packet: ByteArray, aadLength: Int, bodyLength: Int) {
+            cipher(Cipher.ENCRYPT_MODE, stream, counter, packet, 0, aadLength).doFinal(packet, aadLength, bodyLength, packet, aadLength)
         }
+
+        fun open(stream: Int, counter: Long, aad: ByteArray, sealed: ByteArray): ByteArray? =
+            runCatching { cipher(Cipher.DECRYPT_MODE, stream, counter, aad, 0, aad.size).doFinal(sealed) }.getOrNull()
+
+        /** Opens the body of [packet] (the bytes after [aadLength], up to [length]), with the bytes before it as additional data. */
+        fun openPacket(stream: Int, counter: Long, packet: ByteArray, aadLength: Int, length: Int): ByteArray? = runCatching {
+            cipher(Cipher.DECRYPT_MODE, stream, counter, packet, 0, aadLength).doFinal(packet, aadLength, length - aadLength)
+        }.getOrNull()
+
+        private fun cipher(mode: Int, stream: Int, counter: Long, aad: ByteArray, aadOffset: Int, aadLength: Int) = ciphers.get()!!.apply {
+            init(mode, key, GCMParameterSpec(128, nonce(stream, counter)))
+            updateAAD(aad, aadOffset, aadLength)
+        }
+
     }
 
     /** Accepts each seq once and nothing older than the last 64. */
