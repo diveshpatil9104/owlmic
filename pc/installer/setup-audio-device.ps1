@@ -1,4 +1,4 @@
-# Owlmic microphone setup: installs the virtual microphone driver if it's missing, names it "Owlmic",
+# Owlmic microphone setup: installs the virtual microphone driver if it's missing, names it "Owlmic Mic",
 # and leaves the user's own default speakers and microphone exactly as they were.
 #
 # Run by the installer (-Silent). Needs administrator rights.
@@ -38,7 +38,9 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 
 # The Owlmic microphone runs on this virtual cable driver. Its device and endpoint names as Windows reports them.
 $DriverDevice = "VB-Audio Virtual Cable"
-$OwlmicAudio = "Owlmic Audio"
+$OwlmicAdapter = "Owlmic"
+# The adapter name test builds used before, so Repair still finds and renames those endpoints.
+$EarlierAdapter = "Owlmic Audio"
 $EndpointName = "{a45c254e-df1c-4efd-8020-67d146a850e0},2"   # PKEY_Device_DeviceDesc: "CABLE Output"
 $AdapterName  = "{b3f8fa53-0004-438e-9003-51a46e139bfc},6"   # PKEY_DeviceInterface_FriendlyName: the part in brackets
 
@@ -115,55 +117,11 @@ if (Test-Driver) {
     Say "The Owlmic microphone driver is already installed." "Green"
 } else {
     $setup = Join-Path $DriverDir "VBCABLE_Setup_x64.exe"
+    # Owlmic never downloads anything: the installer brings these files.
     if (-not (Test-Path $setup)) {
-        $tempDriverDir = Join-Path $env:TEMP "owlmic-driver"
-        $tempSetup = Join-Path $tempDriverDir "VBCABLE_Setup_x64.exe"
-        if (Test-Path $tempSetup) {
-            $setup = $tempSetup
-            $DriverDir = $tempDriverDir
-            Say "Using cached driver in $tempDriverDir" "DarkGray"
-        } else {
-            Say "Owlmic microphone driver files not found locally. Downloading package..." "Cyan"
-            $zip = Join-Path $env:TEMP "VBCABLE_Driver_Pack45.zip"
-            $expectedHash = 'B950E39F01AF1D04EA623C8F6D8EB9B6EA5C477C637295FABF20631C85116BFB'
-            $sources = @(
-                'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip',
-                'https://web.archive.org/web/20240901000000id_/https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip'
-            )
-            $downloaded = $false
-            foreach ($url in $sources) {
-                try {
-                    Say "Connecting to ${url}..." "DarkGray"
-                    $prevPref = $ProgressPreference
-                    $ProgressPreference = if ($Silent) { 'SilentlyContinue' } else { 'Continue' }
-                    Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 60 -UseBasicParsing
-                    $ProgressPreference = $prevPref
-                    $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-                    if ($hash -eq $expectedHash) {
-                        $downloaded = $true
-                        Say "Driver download verified successfully (SHA256 OK)." "Green"
-                        break
-                    } else {
-                        Say "Checksum verification mismatch ($hash), attempting fallback mirror..." "Yellow"
-                    }
-                } catch {
-                    Say "Download failed from ${url}: $($_.Exception.Message)" "Yellow"
-                }
-            }
-            if ($downloaded) {
-                Say "Extracting driver files..." "Cyan"
-                New-Item -ItemType Directory -Path $tempDriverDir -Force | Out-Null
-                Expand-Archive -Path $zip -DestinationPath $tempDriverDir -Force
-                Remove-Item $zip -Force -ErrorAction SilentlyContinue
-                $setup = $tempSetup
-                $DriverDir = $tempDriverDir
-            } else {
-                Restore-Defaults
-                Say "Owlmic microphone driver could not be found or downloaded." "Yellow"
-                Say "Please check your network connection or reinstall Owlmic." "Yellow"
-                Finish 1
-            }
-        }
+        Restore-Defaults
+        Say "The Owlmic microphone driver files are missing. Run the Owlmic installer again." "Yellow"
+        Finish 1
     }
     Say "Installing the Owlmic microphone. This can take a minute..."
     $proc = Start-Process -FilePath $setup -ArgumentList "-i", "-h" -WorkingDirectory $DriverDir -PassThru
@@ -186,6 +144,8 @@ if (Test-Driver) {
         Say "Windows didn't install the Owlmic microphone driver." "Yellow"
         Finish 1
     }
+    # Tells the uninstaller this driver came with Owlmic, so removing Owlmic may remove it too.
+    Set-Content -Path (Join-Path $DriverDir "installed-by-owlmic") -Value "" -ErrorAction SilentlyContinue
     $restartNeeded = $true
 }
 
@@ -196,9 +156,9 @@ function Rename-Endpoints([string]$flow, [string]$name) {
     Get-ChildItem -Path $root -ErrorAction SilentlyContinue | ForEach-Object {
         $props = Join-Path $_.PSPath "Properties"
         $values = Get-ItemProperty -Path $props -ErrorAction SilentlyContinue
-        if ($values -and ($values.$AdapterName -in @($DriverDevice, $OwlmicAudio))) {
+        if ($values -and ($values.$AdapterName -in @($DriverDevice, $OwlmicAdapter, $EarlierAdapter))) {
             Set-ItemProperty -Path $props -Name $EndpointName -Value $name -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $props -Name $AdapterName -Value $OwlmicAudio -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $props -Name $AdapterName -Value $OwlmicAdapter -ErrorAction SilentlyContinue
             $check = Get-ItemProperty -Path $props -ErrorAction SilentlyContinue
             if ($check -and $check.$EndpointName -eq $name) {
                 $found++
@@ -214,7 +174,7 @@ function Verify-Endpoint([string]$flow, [string]$expectedName) {
     Get-ChildItem -Path $root -ErrorAction SilentlyContinue | ForEach-Object {
         $props = Join-Path $_.PSPath "Properties"
         $values = Get-ItemProperty -Path $props -ErrorAction SilentlyContinue
-        if ($values -and $values.$EndpointName -eq $expectedName -and $values.$AdapterName -eq $OwlmicAudio) {
+        if ($values -and $values.$EndpointName -eq $expectedName -and $values.$AdapterName -eq $OwlmicAdapter) {
             $matched = $true
         }
     }
@@ -224,7 +184,7 @@ function Verify-Endpoint([string]$flow, [string]$expectedName) {
 try {
     $deadline = (Get-Date).AddSeconds(30)
     do {
-        $mics = Rename-Endpoints "Capture" "Owlmic"
+        $mics = Rename-Endpoints "Capture" "Owlmic Mic"
         if ($mics -gt 0) { break }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
@@ -262,7 +222,7 @@ try {
 }
 Restore-Defaults
 
-if (Verify-Endpoint "Capture" "Owlmic") {
+if (Verify-Endpoint "Capture" "Owlmic Mic") {
     Say "Owlmic is verified and ready. Pick it as the microphone in Meet, Zoom or Teams." "Green"
 } else {
     Say "Owlmic is ready. Pick it as the microphone in Meet, Zoom or Teams." "Green"
