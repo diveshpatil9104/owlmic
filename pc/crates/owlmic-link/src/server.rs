@@ -51,13 +51,9 @@ pub struct Slot(Arc<Shared>);
 
 /// A slot for a new connection, or `None` when too many are open.
 pub fn claim(shared: &Arc<Shared>) -> Option<Slot> {
-    shared
-        .open
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-            (n < MAX_CONNECTIONS).then_some(n + 1)
-        })
-        .ok()
-        .map(|_| Slot(shared.clone()))
+    // Counted first and given back when over, so a claim never waits on another.
+    let slot = Slot(shared.clone());
+    (shared.open.fetch_add(1, Ordering::AcqRel) < MAX_CONNECTIONS).then_some(slot)
 }
 
 impl Drop for Slot {
@@ -220,12 +216,14 @@ mod tests {
             to_hub,
             Arc::new(crate::netinfo::Simple),
         ));
-        let slots: Vec<Slot> = (0..MAX_CONNECTIONS)
+        let mut slots: Vec<Slot> = (0..MAX_CONNECTIONS)
             .filter_map(|_| claim(&shared))
             .collect();
         assert_eq!(slots.len(), MAX_CONNECTIONS);
         assert!(claim(&shared).is_none());
-        drop(slots);
+        assert!(claim(&shared).is_none());
+        // The refused claims gave their count back: one closing frees exactly one.
+        slots.pop();
         assert!(claim(&shared).is_some());
     }
 }
