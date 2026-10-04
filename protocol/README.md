@@ -61,7 +61,7 @@ Payloads are JSON objects with camelCase keys. Binary values (keys, nonces, MACs
 | `0x03` | PROOF | Phone → PC | `mac` |
 | `0x04` | PENDING | PC → Phone | `code` (4 digits) |
 | `0x05` | WELCOME | PC → Phone | `sessionId`, `mac`, `settings`, `caps` |
-| `0x06` | REJECT | PC → Phone | `reason` (`busy`, `denied`, `blocked`, `version`), optional `owner` |
+| `0x06` | REJECT | PC → Phone | `reason` (`busy`, `denied`, `blocked`, `version`), optional `owner` (busy), optional `proto` (version: the PC's own version, so the phone can say which side to update) |
 | `0x10` | PING | Both | `t` (sender's clock, microseconds) |
 | `0x11` | PONG | Both | `t` (echoed) |
 | `0x12` | REPORT | Both | `lossPct`, `jitterMs`, `rttMs`, `kbps` (per stream), optional `thermal` |
@@ -71,7 +71,7 @@ Payloads are JSON objects with camelCase keys. Binary values (keys, nonces, MACs
 | `0x23` | STREAM_STOP | Both | `stream` |
 | `0x24` | KEYFRAME_REQUEST | PC → Phone | `{}` |
 | `0x25` | RESTART_STREAM | Both | `stream` |
-| `0x30` | SWITCH | PC → Phone | `link` |
+| `0x30` | SWITCH | PC → Phone | `link`; sent on the link the session moves to |
 | `0x3F` | BYE | Both | optional `reason` |
 
 ### Handshake
@@ -86,7 +86,15 @@ Phone                                   PC
   │── carrier hello on the media channel►│
 ```
 
-A handshake that does not finish in 3 seconds is abandoned and retried.
+A handshake step that does not finish in 3 seconds is abandoned and retried. The approval wait is the exception: while PENDING, the phone sends nothing and the PC keeps the connection open for up to 2 minutes for the user to answer.
+
+### Links of one session
+
+A session can have more than one link at a time: the active one and a warm standby, or a better link being proven before a switch. Each link runs its own handshake (HELLO with `resume` set to the session id) and has its own session keys. Right after its WELCOME, each link sends its own carrier hello, with that link's `auth` key. The PC moves the session by sending SWITCH on the link it moves to; from then on both sides send media on that link and keep the old one only as standby.
+
+### Settings after WELCOME
+
+Right after WELCOME, the PC sends SETTINGS with every shared setting and its version, so both sides start from the same versions. WELCOME's `settings` carries the values only, for applying at once.
 
 ## 5. Keys
 
@@ -119,15 +127,15 @@ stream (1) | flags (1) | seq (4) | timestamp_us (4, wrapping) | payload | GCM ta
 
 Flags: bit 0 is set on video fragments of a keyframe. Other bits are zero.
 
-**Video** payloads start with a fragment header, and a fragment carries at most 1,200 bytes of H.264:
+**Video** payloads start with a 6-byte fragment header. A fragment carries at most 1,200 bytes of H.264, so a datagram stays within 1,232 bytes, and a picture has at most 4,096 fragments (about 4.9 MB); receivers ignore fragments that claim more:
 
 ```
-frame (2) | index (1) | count (1) | H.264 bytes
+frame (2) | index (2) | count (2) | H.264 bytes
 ```
 
 **On stream carriers** (USB debugging, Bluetooth) each media packet is preceded by `0x80` and a 2-byte length.
 
-**Encryption** (Wi-Fi and Bluetooth): every media packet except the carrier hello (stream 0, which proves itself with its own MAC) is sealed with AES-256-GCM using the sender's direction key; nonce = stream (1) ‖ three zero bytes ‖ the packet's `seq` as a 64-bit number; additional data = the 10-byte header. A receiver drops a packet whose `seq` it has already accepted or that is older than its 64-packet replay window. Control frames use stream byte `0xFF` and a per-direction counter that starts at 0 after WELCOME. USB links are not encrypted; the handshake proves who is on the other end.
+**Encryption** (Wi-Fi and Bluetooth): every media packet except the carrier hello (stream 0, which proves itself with its own MAC) is sealed with AES-256-GCM using the sender's direction key; nonce = stream (1) ‖ three zero bytes ‖ the packet's `seq` as a 64-bit number; additional data = the 10-byte header. A receiver drops a packet whose `seq` it has already accepted or that is older than its 64-packet replay window. Control frames use stream byte `0xFF` and a per-direction counter that starts at 0 after WELCOME. USB links are not encrypted; the handshake proves who is on the other end. A sender never reuses a `seq` under the same keys: before a stream's `seq` would wrap, the link is closed and handshaken again, which brings new keys.
 
 ### Streams
 

@@ -59,13 +59,19 @@
       "frame": 0,
       "index": 0,
       "count": 1,
-      "hex": "00000001"
+      "hex": "000000000001"
     },
     {
       "frame": 65535,
       "index": 3,
       "count": 7,
-      "hex": "ffff0307"
+      "hex": "ffff00030007"
+    },
+    {
+      "frame": 513,
+      "index": 299,
+      "count": 300,
+      "hex": "0201012b012c"
     }
   ],
   "maxFragmentPayload": 1200,
@@ -74,5 +80,6 @@
       "packetHex": "01000000000700075300112233",
       "hex": "80000d01000000000700075300112233"
     }
-  ]
+  ],
+  "maxFragments": 4096
 }
