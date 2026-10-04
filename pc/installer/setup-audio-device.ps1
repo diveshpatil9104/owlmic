@@ -7,7 +7,9 @@
 
 param (
     [switch]$Silent = $false,
-    [string]$DriverDir = ""
+    [string]$DriverDir = "",
+    [switch]$Clean = $false,
+    [switch]$Uninstall = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +28,9 @@ $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIde
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     if ($Silent) { exit 1 }
     Say "Setting up the Owlmic microphone needs administrator rights. Asking Windows..." "Yellow"
-    $elevated = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -DriverDir `"$DriverDir`""
+    $cleanArg = if ($Clean) { " -Clean" } else { "" }
+    $uninstArg = if ($Uninstall) { " -Uninstall" } else { "" }
+    $elevated = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -DriverDir `"$DriverDir`"$cleanArg$uninstArg"
     try {
         $proc = Start-Process powershell.exe -ArgumentList $elevated -Verb RunAs -PassThru -Wait
         exit $proc.ExitCode
@@ -106,6 +110,59 @@ function Restore-Defaults {
     }
 }
 
+function Remove-Driver([bool]$restore = $true) {
+    if ($restore) { Restore-Defaults }
+    Say "Checking for existing Owlmic / VB-Audio microphone driver..."
+    $dev = Get-PnpDevice -Class Media -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -eq $DriverDevice }
+    $setup = Join-Path $DriverDir "VBCABLE_Setup_x64.exe"
+    if ($dev -or (Test-Path (Join-Path $DriverDir "installed-by-owlmic"))) {
+        if (Test-Path $setup) {
+            Say "Uninstalling existing microphone driver..."
+            $proc = Start-Process -FilePath $setup -ArgumentList "-u", "-h" -WorkingDirectory $DriverDir -PassThru
+            [void]$proc.WaitForExit(60000)
+        }
+        $deadline = (Get-Date).AddSeconds(15)
+        do {
+            $remaining = Get-PnpDevice -Class Media -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -eq $DriverDevice }
+            if (-not $remaining) { break }
+            Start-Sleep -Seconds 1
+        } while ((Get-Date) -lt $deadline)
+        Remove-Item (Join-Path $DriverDir "installed-by-owlmic") -Force -ErrorAction SilentlyContinue
+    }
+
+    # Clean up stale endpoint property overrides
+    foreach ($flow in "Capture", "Render") {
+        $root = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\$flow"
+        Get-ChildItem -Path $root -ErrorAction SilentlyContinue | ForEach-Object {
+            $props = Join-Path $_.PSPath "Properties"
+            $values = Get-ItemProperty -Path $props -ErrorAction SilentlyContinue
+            if ($values -and ($values.$AdapterName -in @($DriverDevice, $OwlmicAdapter, $EarlierAdapter))) {
+                Remove-ItemProperty -Path $props -Name $EndpointName -ErrorAction SilentlyContinue
+                Remove-ItemProperty -Path $props -Name $AdapterName -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    try {
+        Restart-Service -Name "AudioEndpointBuilder" -Force -ErrorAction SilentlyContinue
+        Start-Service -Name "Audiosrv" -ErrorAction SilentlyContinue
+    } catch {}
+
+    if ($restore) { Restore-Defaults }
+}
+
+if ($Uninstall) {
+    Remove-Driver -restore $true
+    Say "Owlmic microphone uninstalled successfully." "Green"
+    Finish 0
+}
+
+if ($Clean) {
+    Say "Cleaning up previous driver and endpoints for a clean install..."
+    Remove-Driver -restore $false
+    Start-Sleep -Seconds 2
+}
+
 # 2. Install the driver if it isn't there.
 function Test-Driver {
     $dev = Get-PnpDevice -Class Media -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -eq $DriverDevice }
@@ -113,7 +170,7 @@ function Test-Driver {
 }
 
 $restartNeeded = $false
-if (Test-Driver) {
+if ((-not $Clean) -and (Test-Driver)) {
     Say "The Owlmic microphone driver is already installed." "Green"
 } else {
     $setup = Join-Path $DriverDir "VBCABLE_Setup_x64.exe"

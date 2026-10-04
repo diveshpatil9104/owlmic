@@ -13,13 +13,14 @@
 #ifndef OwlmicVcam
   #define OwlmicVcam "..\target\release\owlmic_vcam.dll"
 #endif
+#define MyAppId "{9F3B6E8C-8F74-4C75-A1E2-93D0F8C56A10}"
 #define MyAppName "Owlmic"
 #define MyAppPublisher "Owlmic Contributors"
 #define MyAppURL "https://github.com/diveshpatil9104/owlmic"
 #define MyAppExeName "owlmic.exe"
 
 [Setup]
-AppId={{9F3B6E8C-8F74-4C75-A1E2-93D0F8C56A10}
+AppId={{#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -112,19 +113,73 @@ Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Owlmic""
 var
   MicNeedsRestart: Boolean;
 
-// Sets up Owlmic's microphone after the files are in place. The script restores the user's own default
-// speakers and microphone, and exits 3010 when Windows has to restart to finish.
+function GetUninstallString(): String;
+var
+  UninstPath: String;
+begin
+  Result := '';
+  UninstPath := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1';
+  if not RegQueryStringValue(HKLM, UninstPath, 'QuietUninstallString', Result) then
+    if not RegQueryStringValue(HKLM, UninstPath, 'UninstallString', Result) then
+      if not RegQueryStringValue(HKCU, UninstPath, 'QuietUninstallString', Result) then
+        RegQueryStringValue(HKCU, UninstPath, 'UninstallString', Result);
+end;
+
+// Prepares a clean install by terminating running instances, unregistering the virtual camera,
+// silently executing any previous uninstaller, and removing leftover files.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+  UninstStr: String;
+  AppDir: String;
+begin
+  Result := '';
+  AppDir := ExpandConstant('{app}');
+
+  // 1. Unregister camera and terminate running Owlmic processes
+  if FileExists(ExpandConstant('{app}\{#MyAppExeName}')) then
+  begin
+    Exec(ExpandConstant('{app}\{#MyAppExeName}'), '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{app}\{#MyAppExeName}'), '--unregister-camera', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+  Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // 2. If a prior installation exists, run its uninstaller silently
+  UninstStr := GetUninstallString();
+  if UninstStr <> '' then
+  begin
+    UninstStr := RemoveQuotes(UninstStr);
+    if FileExists(UninstStr) then
+    begin
+      Exec(UninstStr, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(2000);
+    end;
+  end;
+
+  // 3. Remove any leftover files from previous versions in {app}
+  if DirExists(AppDir) then
+  begin
+    DelTree(AppDir + '\driver', True, True, True);
+    DeleteFile(AppDir + '\{#MyAppExeName}');
+    DeleteFile(AppDir + '\owlmic_vcam.dll');
+    DeleteFile(AppDir + '\softcam.dll');
+    DeleteFile(AppDir + '\setup-audio-device.ps1');
+    DeleteFile(AppDir + '\THIRD-PARTY-NOTICES.txt');
+  end;
+end;
+
+// Sets up Owlmic's microphone cleanly after files are copied. Passes -Clean to purge old drivers first.
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
 begin
   if CurStep <> ssPostInstall then
     Exit;
-  WizardForm.StatusLabel.Caption := 'Adding Owlmic Mic...';
+  WizardForm.StatusLabel.Caption := 'Configuring Owlmic Mic (Clean Install)...';
   WizardForm.ProgressGauge.Style := npbstMarquee;
   try
     if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-        '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup-audio-device.ps1') + '" -Silent',
+        '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup-audio-device.ps1') + '" -Clean -Silent',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and ((ResultCode = 0) or (ResultCode = 3010)) then
       MicNeedsRestart := ResultCode = 3010
     else
@@ -140,31 +195,25 @@ begin
   Result := MicNeedsRestart;
 end;
 
-// An upgrade asks the running Owlmic to quit cleanly before its files are replaced.
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  ResultCode: Integer;
-begin
-  if FileExists(ExpandConstant('{app}\{#MyAppExeName}')) then
-    if not Exec(ExpandConstant('{app}\{#MyAppExeName}'), '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-        or (ResultCode <> 0) then
-      Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Result := '';
-end;
-
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if (CurPageID = wpFinished) and MicNeedsRestart then
     WizardForm.FinishedHeadingLabel.Caption := 'Almost ready';
 end;
 
-// Removes the microphone driver only when Owlmic installed it (setup-audio-device.ps1 leaves a marker),
-// so a VB-CABLE the user had before stays.
+// Removes the microphone driver cleanly when uninstalling.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ResultCode: Integer;
 begin
-  if (CurUninstallStep = usUninstall) and FileExists(ExpandConstant('{app}\driver\installed-by-owlmic')) then
-    Exec(ExpandConstant('{app}\driver\VBCABLE_Setup_x64.exe'), '-u -h', ExpandConstant('{app}\driver'),
-      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if CurUninstallStep = usUninstall then
+  begin
+    if FileExists(ExpandConstant('{app}\setup-audio-device.ps1')) then
+      Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+        '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup-audio-device.ps1') + '" -Uninstall -Silent',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    else if FileExists(ExpandConstant('{app}\driver\VBCABLE_Setup_x64.exe')) then
+      Exec(ExpandConstant('{app}\driver\VBCABLE_Setup_x64.exe'), '-u -h', ExpandConstant('{app}\driver'),
+        SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
 end;
