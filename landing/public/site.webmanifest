@@ -1,0 +1,19 @@
+{
+  "name": "Owlmic — Turn Android Phone into PC Mic, Camera & Speaker",
+  "short_name": "Owlmic",
+  "description": "High-performance bridge that turns your Android phone into a studio mic, 1080p webcam, and low-latency speaker for Windows.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "multimedia", "productivity"]
+}

@@ -1,0 +1,9 @@
+# Owlmic Robots.txt
+# https://owlmic.com
+
+User-agent: *
+Allow: /
+
+# Canonical host and sitemap
+Host: https://owlmic.com
+Sitemap: https://owlmic.com/sitemap.xml
