@@ -30,7 +30,7 @@ Owlmic for PC runs as a lightweight, per-user background application in your Win
 - \`owlmic.exe\`: The primary background application and tray coordinator.
 - \`owlmic_vcam.dll\`: High-performance Media Foundation virtual camera driver for Windows 11.
 - \`softcam.dll\`: DirectShow virtual camera driver filter for Windows 10 compatibility.
-- \`setup-audio-device.ps1\`: Automated endpoint management and repair script.`
+- \`setup-audio-device.ps1\`: Automated endpoint management and repair script.`,
   },
   {
     id: 'install-android',
@@ -52,7 +52,7 @@ The Owlmic Android app acts as the client hardware sensor. It captures pristine 
 ### Battery Optimization
 To prevent aggressive OEM battery management from terminating background streaming:
 1. Long press Owlmic icon -> **App info**.
-2. Tap **Battery** -> Select **Unrestricted**.`
+2. Tap **Battery** -> Select **Unrestricted**.`,
   },
   {
     id: 'first-connection',
@@ -67,7 +67,7 @@ Owlmic follows a strict **Trust-On-First-Use (TOFU)** security model. A new phon
 2. **Open Owlmic on Phone**: The phone discovers your PC over Wi-Fi or USB cable within 1 second.
 3. **Check the 4-Digit Code**: The phone displays "Approve on your PC · XXXX".
 4. **Click Allow on PC**: Your PC displays a prompt showing the phone model and identical 4-digit code. Click **Allow**.
-5. Both devices derive permanent pairing keys using NIST P-256 ECDH. Subsequent connections are completely instant and automatic!`
+5. Both devices derive permanent pairing keys using NIST P-256 ECDH. Subsequent connections are completely instant and automatic!`,
   },
   {
     id: 'everyday-use',
@@ -85,7 +85,7 @@ Once paired, Owlmic operates transparently.
 ### Selecting in Meeting Apps
 - **Discord**: User Settings -> Voice & Video -> Input: **Owlmic Mic (Owlmic Bridge)**, Camera: **Owlmic Cam**.
 - **Zoom / Teams / Meet**: Select **Owlmic Mic** as microphone and **Owlmic Cam** as camera.
-- **OBS Studio**: Add Audio Input Capture source -> **Owlmic Mic**.`
+- **OBS Studio**: Add Audio Input Capture source -> **Owlmic Mic**.`,
   },
   {
     id: 'links',
@@ -101,7 +101,7 @@ Owlmic features a zero-configuration, multi-tier transporter that automatically 
 4. **Level 4 — Bluetooth**: Audio-only RFCOMM failover when outside Wi-Fi range.
 
 ### Make-Before-Break Switching
-Upgrading from Wi-Fi to USB is seamless: the new connection is proven in the background, a \`SWITCH\` opcode is sent, and media instantly shifts without dropping calls or stuttering.`
+Upgrading from Wi-Fi to USB is seamless: the new connection is proven in the background, a \`SWITCH\` opcode is sent, and media instantly shifts without dropping calls or stuttering.`,
   },
   {
     id: 'troubleshooting',
@@ -118,7 +118,7 @@ If Owlmic Mic or Cam shows an error:
 
 ### Common Fixes
 - **Phone cannot find PC**: Ensure both devices are on the same Wi-Fi network and AP Isolation is disabled. Try entering your PC's IP address directly under Settings -> "Add PC by address".
-- **Microphone silent**: Check that the mic tile on your phone is ON and the volume in Windows Sound Settings is set to 100%.`
+- **Microphone silent**: Check that the mic tile on your phone is ON and the volume in Windows Sound Settings is set to 100%.`,
   },
   {
     id: 'privacy',
@@ -129,7 +129,7 @@ If Owlmic Mic or Cam shows an error:
 - **Zero Cloud & Zero Telemetry**: 100% peer-to-peer. No servers, no accounts, no analytics, no trackers.
 - **Default-OFF Policy**: Microphone and camera always start in the OFF state.
 - **AES-256-GCM Encryption**: All wireless control and media datagrams are sealed with authenticated encryption.
-- **Local Storage Only**: Pairing tokens are kept exclusively in local configuration on your phone and PC.`
+- **Local Storage Only**: Pairing tokens are kept exclusively in local configuration on your phone and PC.`,
   },
   {
     id: 'uninstall',
@@ -143,7 +143,7 @@ If Owlmic Mic or Cam shows an error:
 3. The uninstaller removes application binaries, deregisters virtual camera filters, cleans up audio endpoints, and restores Windows default devices.
 
 ### Android
-Long press Owlmic -> tap **Uninstall**.`
+Long press Owlmic -> tap **Uninstall**.`,
   },
   {
     id: 'architecture',
@@ -162,7 +162,7 @@ Long press Owlmic -> tap **Uninstall**.`
 - **SessionHub**: TOFU trust, P-256 ECDH key exchange, session hold state machine.
 - **MediaHub**: Audio jitter buffer, cubic resampler (±0.2%), H.264 slice reassembly, NV12 conversion, RNNoise DSP.
 - **DeviceHub**: Feeds virtual audio cable and Media Foundation virtual camera.
-- **SettingsHub**: Versioned settings store with bidirectional synchronization.`
+- **SettingsHub**: Versioned settings store with bidirectional synchronization.`,
   },
   {
     id: 'transporter',
@@ -179,7 +179,7 @@ Long press Owlmic -> tap **Uninstall**.`
 ### Health & Supervision
 - 1,000 ms ping/pong heartbeat interval.
 - 3,000 ms socket timeout threshold.
-- 30-second session hold retains virtual devices on PC during temporary carrier drops.`
+- 30-second session hold retains virtual devices on PC during temporary carrier drops.`,
   },
   {
     id: 'protocol',
@@ -212,7 +212,7 @@ All integers are big-endian. Text strings are UTF-8.
 - Stream 0: Carrier Hello
 - Stream 1: Microphone (Phone -> PC)
 - Stream 2: Camera (Phone -> PC)
-- Stream 3: Speaker (PC -> Phone)`
+- Stream 3: Speaker (PC -> Phone)`,
   },
   {
     id: 'media',
@@ -231,7 +231,7 @@ All integers are big-endian. Text strings are UTF-8.
 - CameraX capture with OpenGL ES 2.0 / 3.0 shader processing.
 - Hardware MediaCodec H.264 Annex B encoder.
 - MTU-safe fragmentation (<= 1,200 bytes per packet).
-- Decoded to NV12 and written into an atomic shared memory ring buffer.`
+- Decoded to NV12 and written into an atomic shared memory ring buffer.`,
   },
   {
     id: 'virtual-devices',
@@ -246,7 +246,7 @@ All integers are big-endian. Text strings are UTF-8.
 ### Owlmic Cam
 - **Windows 11**: Native Media Foundation Software Virtual Camera (\`owlmic_vcam.dll\`) via \`MFCreateVirtualCamera\`.
 - **Windows 10**: DirectShow capture source filter (\`softcam.dll\`).
-- Shared memory ring buffer ensures lock-free, zero-copy frame handoff.`
+- Shared memory ring buffer ensures lock-free, zero-copy frame handoff.`,
   },
   {
     id: 'security',
@@ -258,7 +258,7 @@ All integers are big-endian. Text strings are UTF-8.
 - **KDF**: HKDF-SHA256 (RFC 5869).
 - **Encryption**: AES-256-GCM with 96-bit nonces and 128-bit authentication tags.
 - **Replay Protection**: 64-packet bitmask replay window.
-- **Rate Limits**: Max 20 probe answers/second, max 4 handshakes/second.`
+- **Rate Limits**: Max 20 probe answers/second, max 4 handshakes/second.`,
   },
   {
     id: 'design-language',
@@ -273,7 +273,7 @@ All integers are big-endian. Text strings are UTF-8.
 
 ### PC Tray Flyout
 - 560 x 255 px Win32 panel rendered in double-buffered GDI/GDI+.
-- Cold start in < 15 ms, memory footprint < 15 MB.`
+- Cold start in < 15 ms, memory footprint < 15 MB.`,
   },
   {
     id: 'building',
@@ -300,7 +300,7 @@ cd android
 cd landing
 npm install
 npm run build
-\`\`\``
+\`\`\``,
   },
   {
     id: 'releasing',
@@ -311,6 +311,6 @@ npm run build
 1. Verify \`cargo test --workspace\` and \`./gradlew testDebugUnitTest lintDebug\`.
 2. Validate wire vectors against \`protocol/vectors/*.json\`.
 3. Check product name spelling check: \`git grep -nIE 'OwlMic|owlMic|Owl[ -][Mm]ic'\`.
-4. Tag \`v1.0.0\` to trigger automated Inno Setup, APK, and AAB release builds on GitHub Actions.`
-  }
+4. Tag \`v1.0.0\` to trigger automated Inno Setup, APK, and AAB release builds on GitHub Actions.`,
+  },
 ]
