@@ -16,6 +16,12 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import kotlin.concurrent.thread
 
+interface SeekerApi : Closeable {
+    var pace: Seeker.Pace
+    fun burst()
+    fun tunnelReleased()
+}
+
 /**
  * Finds PCs (section 14.2): the phone asks, the PC answers. A burst of probes at 0, 100 and 300 ms on every interface,
  * then one a second while searching and one every 2 s while connected (to notice better links). Alongside, it tries
@@ -28,10 +34,10 @@ class Seeker(
     private val manualAddresses: () -> List<String>,
     private val networkFor: (InetAddress) -> Network?,
     private val onFound: (Candidate) -> Unit,
-) : Closeable {
+) : SeekerApi {
     enum class Pace { SEARCHING, CONNECTED, CONNECTED_BY_USB_DEBUGGING }
 
-    @Volatile var pace = Pace.SEARCHING
+    @Volatile override var pace = Pace.SEARCHING
 
     @Volatile private var open = true
 
@@ -51,12 +57,12 @@ class Seeker(
     }
 
     /** Starts a new burst: the app opened, or a network came or went. */
-    fun burst() {
+    override fun burst() {
         burstAt = System.currentTimeMillis()
     }
 
     /** The Link Hub is done with the tunnel it was handed (used or failed): look again. */
-    fun tunnelReleased() {
+    override fun tunnelReleased() {
         tunnelBusy = false
     }
 

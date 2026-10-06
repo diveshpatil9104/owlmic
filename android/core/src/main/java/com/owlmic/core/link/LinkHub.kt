@@ -114,6 +114,7 @@ class LinkHub(
     private val usbPlugged: () -> Boolean,
     private val emit: (LinkEvent) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
+    seekerFactory: ((onFound: (Candidate) -> Unit) -> SeekerApi)? = null,
 ) : Hub<LinkMsg>("link") {
     private enum class Phase { SEARCHING, CONNECTING, APPROVING, ACTIVE, HELD, WAITING, DENIED, BUSY, UPDATE, KEY_CHANGED }
 
@@ -125,7 +126,8 @@ class LinkHub(
     private var searchStartedAt = now()
     private var heldAt = 0L
     private var connection: Connection? = null
-    private val seeker = Seeker(store.phoneId, phoneName, store::addresses, { wifi?.forHost(it) }) { post(LinkMsg.Found(it)) }
+    private val seeker: SeekerApi = seekerFactory?.invoke { post(LinkMsg.Found(it)) }
+        ?: Seeker(store.phoneId, phoneName, store::addresses, { wifi?.forHost(it) }) { post(LinkMsg.Found(it)) }
     private val candidates = LinkedHashMap<String, Pair<Candidate, Long>>()
     private val failures = HashMap<String, Pair<Int, Long>>()
 

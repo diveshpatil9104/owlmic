@@ -113,8 +113,15 @@ class LinkHubTest {
     private fun connectedOver(link: LinkKind) =
         next<LinkEvent.ConnectionChanged> { (it.connection as? Connection.Connected)?.link == link }
 
+    private val noopSeeker = object : SeekerApi {
+        override var pace = Seeker.Pace.SEARCHING
+        override fun burst() {}
+        override fun tunnelReleased() {}
+        override fun close() {}
+    }
+
     private fun hub(store: Store = store()) =
-        LinkHub(store, MediaRouter(), null, null, { "Pixel" }, "Pixel 8", 34, { null }, { false }, { events.put(it) }, { clock })
+        LinkHub(store, MediaRouter(), null, null, { "Pixel" }, "Pixel 8", 34, { null }, { false }, { events.put(it) }, { clock }, seekerFactory = { noopSeeker })
 
     @Test
     fun aPcWhoseHandshakesKeepFailingIsNamedAfterTenSeconds() {
@@ -166,7 +173,7 @@ class LinkHubTest {
     @Test
     fun theSwitchArrivesOnTheNewLinkAndMediaMovesThere() {
         val router = MediaRouter()
-        val hub = LinkHub(store(), router, null, null, { "Pixel" }, "Pixel 8", 34, { null }, { false }, { events.put(it) })
+        val hub = LinkHub(store(), router, null, null, { "Pixel" }, "Pixel 8", 34, { null }, { false }, { events.put(it) }, seekerFactory = { noopSeeker })
         thread(isDaemon = true) {
             keepAlive(welcomeNext())
             // The PC moves the session by sending SWITCH on the link it moves to (protocol section 4).
