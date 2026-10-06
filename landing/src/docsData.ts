@@ -310,7 +310,7 @@ npm run build
 
 1. Verify \`cargo test --workspace\` and \`./gradlew testDebugUnitTest lintDebug\`.
 2. Validate wire vectors against \`protocol/vectors/*.json\`.
-3. Check product name spelling check: \`git grep -nIE 'OwlMic|owlMic|Owl[ -][Mm]ic'\`.
+3. Check product name spelling invariant in CI.
 4. Tag \`v1.0.0\` to trigger automated Inno Setup, APK, and AAB release builds on GitHub Actions.`,
   },
 ]

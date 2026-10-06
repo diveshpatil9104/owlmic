@@ -41,9 +41,10 @@ This document describes the capture, encoding, transmission, jitter compensation
 - **Cubic Drift Resampler**:
   - Compares the average fill level of the jitter buffer against crystal oscillator variations between the phone and PC sound cards.
   - Gently speeds up or slows down playback pitch by at most ±0.2% using a smooth cubic interpolator, eliminating audible clicks, skips, or buffer under-runs.
-- **DSP Noise Suppression**:
+- **DSP Noise Suppression & Automatic Gain Control (AGC)**:
   - Built-in RNNoise neural network model (`nnnoiseless`) removes background typing, air conditioning, and room hiss without coloring vocal timbre.
   - Can be toggled between "Phone only", "Phone + PC", or "Off".
+  - **Speech Normalization (AGC)**: An asymmetric peak envelope follower (8 ms attack, 250 ms release) normalizes phone microphone audio to a consistent -14 dBFS speech target with up to +18 dB boost. Includes a -42 dBFS noise gate to avoid boosting room noise during pauses, a 15 ms gain smoothing filter to eliminate zipper distortion, and a soft-knee limiter to prevent digital clipping.
 
 ---
 

@@ -21,11 +21,7 @@ Owlmic adheres to [Semantic Versioning 2.0.0](https://semver.org/).
    - `cargo test -p owlmic-proto` verifies wire encoders against `protocol/vectors/*.json`.
    - Android `./gradlew :core:test` validates Kotlin proto vectors against the same files.
 3. **Verify Product Name Invariant**:
-   - Run the CI name verification check:
-     ```bash
-     git grep -nIE 'OwlMic|owlMic|Owl[ -][Mm]ic' -- . ':!.github/workflows/ci.yml'
-     ```
-     Ensure no incorrect casings exist.
+   - Run the CI name verification check (defined in `.github/workflows/ci.yml`) to ensure no incorrect casings exist across the codebase.
 4. **Update Documentation & Changelog**:
    - Record user-facing highlights, fixes, and contributor credits in [`docs/CHANGELOG.md`](../CHANGELOG.md).
    - Ensure `README.md` download links and version badges match the target milestone.
