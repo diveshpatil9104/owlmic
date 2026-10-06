@@ -85,6 +85,7 @@ fn jittery_tone_levels() -> Vec<f64> {
     let jb = JitterBuffer::new();
     jb.set_level(1);
     jb.set_ns_enabled(false); // RNNoise would take a steady tone for noise
+    jb.set_agc_enabled(false);
     let mut tone: Vec<i16> = (0..48_000 * 5)
         .map(|n| {
             ((2.0 * std::f64::consts::PI * 12_000.0 * n as f64 / 48_000.0).sin() * 8000.0) as i16
@@ -138,6 +139,7 @@ fn test_gaps_fade_instead_of_clicking() {
     let jb = JitterBuffer::new();
     jb.set_level(1);
     jb.set_ns_enabled(false);
+    jb.set_agc_enabled(false);
     jb.push_samples(&mut [16_000i16; USB_TARGET_MS * SAMPLES_PER_MS]);
     let mut out = [0.0f32; 1_440]; // more than the buffer holds
     jb.pop_samples(&mut out, 1);
