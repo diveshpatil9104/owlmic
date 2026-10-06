@@ -1,5 +1,5 @@
-use nnnoiseless::DenoiseState;
 use super::agc::Agc;
+use nnnoiseless::DenoiseState;
 
 pub struct AudioDsp {
     denoise: Box<DenoiseState<'static>>,
@@ -16,8 +16,8 @@ impl AudioDsp {
     pub fn new() -> Self {
         Self {
             denoise: DenoiseState::new(),
-            // 48 kHz, -6 dB target, 20 dB max gain
-            agc: Agc::new(48000.0, -6.0, 20.0),
+            // 48 kHz, -14 dBFS target speech level, 18 dB max boost
+            agc: Agc::new(48000.0, -14.0, 18.0),
             scratch_in: [0.0; DenoiseState::FRAME_SIZE],
             scratch_out: [0.0; DenoiseState::FRAME_SIZE],
             dry: [0.0; DenoiseState::FRAME_SIZE],
@@ -30,7 +30,7 @@ impl AudioDsp {
         }
 
         let strength_ratio = (ns_strength_pct.min(100) as f32) / 100.0;
-        
+
         for chunk in samples.chunks_mut(DenoiseState::FRAME_SIZE) {
             if chunk.len() < DenoiseState::FRAME_SIZE {
                 continue;
@@ -50,21 +50,21 @@ impl AudioDsp {
                     let denoised = *denoised_ref;
                     *denoised_ref = dry * (1.0 - strength_ratio) + denoised * strength_ratio;
                 }
-                
+
                 if agc {
                     self.agc.process(&mut self.scratch_out);
                 }
-                
+
                 for (dest, &processed) in chunk.iter_mut().zip(self.scratch_out.iter()) {
                     *dest = processed.clamp(-32768.0, 32767.0) as i16;
                 }
                 self.dry = self.scratch_in;
             } else {
-                // If denoise is off, just run AGC on scratch_in directly
+                // If denoise is off, run AGC on scratch_in directly
                 if agc {
                     self.agc.process(&mut self.scratch_in);
                 }
-                
+
                 for (dest, &processed) in chunk.iter_mut().zip(self.scratch_in.iter()) {
                     *dest = processed.clamp(-32768.0, 32767.0) as i16;
                 }

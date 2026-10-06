@@ -87,7 +87,11 @@ impl JitterBuffer {
             return;
         }
         if let Ok(mut dsp) = self.dsp.lock() {
-            dsp.process(samples, self.ns_strength(), self.agc_enabled.load(Ordering::Relaxed));
+            dsp.process(
+                samples,
+                self.ns_strength(),
+                self.agc_enabled.load(Ordering::Relaxed),
+            );
         }
         self.ring.push(samples);
     }
