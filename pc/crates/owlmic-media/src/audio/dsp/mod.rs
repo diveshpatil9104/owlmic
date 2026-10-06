@@ -1,3 +1,4 @@
+mod agc;
 mod denoise;
 #[cfg(test)]
 mod tests;

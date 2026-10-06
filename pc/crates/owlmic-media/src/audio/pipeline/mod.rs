@@ -21,6 +21,7 @@ pub struct JitterBuffer {
     base_target_samples: AtomicUsize,
     adaptive_target_samples: AtomicUsize,
     ns_enabled: AtomicBool,
+    agc_enabled: AtomicBool,
     /// Receive side.
     dsp: Mutex<AudioDsp>,
     /// Receive side.
@@ -38,6 +39,7 @@ impl JitterBuffer {
             base_target_samples: AtomicUsize::new(base_target),
             adaptive_target_samples: AtomicUsize::new(base_target),
             ns_enabled: AtomicBool::new(true),
+            agc_enabled: AtomicBool::new(true),
             dsp: Mutex::new(AudioDsp::new()),
             stats: Mutex::new(JitterStats::new()),
             playout: Mutex::new(Playout::new()),
@@ -85,7 +87,11 @@ impl JitterBuffer {
             return;
         }
         if let Ok(mut dsp) = self.dsp.lock() {
-            dsp.process(samples, self.ns_strength());
+            dsp.process(
+                samples,
+                self.ns_strength(),
+                self.agc_enabled.load(Ordering::Relaxed),
+            );
         }
         self.ring.push(samples);
     }
@@ -105,6 +111,11 @@ impl JitterBuffer {
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.ring.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_agc_enabled(&self, enabled: bool) {
+        self.agc_enabled.store(enabled, Ordering::Relaxed);
     }
 }
 

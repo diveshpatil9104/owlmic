@@ -5,7 +5,7 @@ fn test_audio_dsp_rnnoise_suppression() {
     let mut dsp = AudioDsp::new();
     let mut samples = vec![1000i16; 480 * 4];
 
-    dsp.process(&mut samples, 100);
+    dsp.process(&mut samples, 100, false);
 
     assert_eq!(samples.len(), 480 * 4);
     assert!(samples.iter().any(|&s| s != 0));
@@ -17,7 +17,7 @@ fn test_audio_dsp_zero_strength_passthrough() {
     let mut samples = vec![1234i16; 480 * 2];
     let copy = samples.clone();
 
-    dsp.process(&mut samples, 0);
+    dsp.process(&mut samples, 0, false);
 
     assert_eq!(samples, copy);
 }
@@ -67,7 +67,7 @@ fn test_partial_strength_keeps_the_voice_whole() {
     let mut output = input.clone();
     let mut dsp = AudioDsp::new();
     for chunk in output.chunks_mut(FRAME) {
-        dsp.process(chunk, 50);
+        dsp.process(chunk, 50, false);
     }
 
     let settled = FRAME * 100;
