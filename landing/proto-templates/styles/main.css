@@ -1,0 +1,124 @@
+/* UI Prototype Base Styles */
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
+    /* Set body to slightly gray so the OLED black devices stand out */
+    background-color: #0A0A0A; 
+    color: #FFFFFF;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* Controls Container (Top Right) */
+.controls-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    background-color: #1A1A1A;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid #333333;
+    position: relative;
+}
+
+/* The Sliding Indicator */
+.tab-indicator {
+    position: absolute;
+    top: 6px; /* matching padding of tab-bar */
+    bottom: 6px;
+    left: 0;
+    width: 0;
+    background-color: #333333;
+    border-radius: 4px;
+    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    z-index: 0;
+}
+
+.tab-btn {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    border: none;
+    color: #8E8E93;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.tab-btn:hover {
+    color: #FFFFFF;
+}
+
+.tab-btn.active {
+    color: #FFFFFF;
+}
+
+/* Views Container */
+.views-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+/* View Hiding Logic */
+.view {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.97);
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.view.active {
+    opacity: 1;
+    pointer-events: all;
+    transform: scale(1);
+    z-index: 1;
+}
+
+/* --- DEVICE CONTAINERS --- */
+.device-container {
+    background-color: #000000; /* OLED Black */
+    border: 1px solid #262626; /* Subtle hairline border */
+    overflow: hidden;
+    position: relative;
+    /* No generic frame decorations, purely minimal */
+}
+
+.device-mobile {
+    width: 375px;
+    height: 812px;
+    border-radius: 40px;
+}
+
+.device-mobile-horizontal {
+    width: 812px;
+    height: 375px;
+    border-radius: 40px;
+}
+
+.device-pc {
+    width: 560px; /* Matched from tokens.json */
+    height: 255px; /* Matched from tokens.json */
+    border-radius: 12px;
+}

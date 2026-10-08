@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Prototype Sandbox</title>
+    
+    <!-- Base Styles -->
+    <link rel="stylesheet" href="styles/main.css">
+    <!-- View-Specific Styles -->
+    <link rel="stylesheet" href="styles/mobile.css">
+    <link rel="stylesheet" href="styles/mobile-horizontal.css">
+    <link rel="stylesheet" href="styles/pc.css">
+</head>
+<body>
+    <!-- Top Right Controls -->
+    <div class="controls-container">
+        <div class="tab-bar">
+            <div class="tab-indicator"></div>
+            <button class="tab-btn active" data-target="view-mobile" title="Mobile">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+            </button>
+            <button class="tab-btn" data-target="view-mobile-horizontal" title="Mobile Horizontal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="18" y1="12" x2="18.01" y2="12"></line></svg>
+            </button>
+            <button class="tab-btn" data-target="view-pc" title="PC">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Container for the UI Views -->
+    <div class="views-container">
+        <!-- Mobile View -->
+        <div id="view-mobile" class="view active">
+            <div class="device-container device-mobile">
+                <!-- Mobile Portrait UI goes here -->
+            </div>
+        </div>
+
+        <!-- Mobile Horizontal View -->
+        <div id="view-mobile-horizontal" class="view hidden">
+            <div class="device-container device-mobile-horizontal">
+                <!-- Mobile Horizontal UI goes here -->
+            </div>
+        </div>
+
+        <!-- PC View -->
+        <div id="view-pc" class="view hidden">
+            <div class="device-container device-pc">
+                <!-- PC UI goes here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="scripts/tabs.js"></script>
+    <script src="scripts/mobile.js"></script>
+    <script src="scripts/mobile-horizontal.js"></script>
+    <script src="scripts/pc.js"></script>
+</body>
+</html>
