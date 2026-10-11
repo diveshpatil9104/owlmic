@@ -1,1 +1,437 @@
-/* PC Specific Styles */
+/* Owlmic PC Win32 Flyout Panel Styles
+   Conforms to pc/crates/owlmic-ui/src/layout.rs, view.rs, panel.rs, and design/tokens.json
+   Fixed 560 x 255 px with 12px corner radius and 1px hairlines */
+
+.pc-panel-wrapper {
+    width: 560px;
+    height: 255px;
+    background-color: var(--color-hairline); /* 1px hairline background */
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+    position: relative;
+    font-family: var(--font-sans);
+}
+
+/* Screens container */
+.pc-screen {
+    position: absolute;
+    inset: 0;
+    display: none;
+    background-color: var(--color-hairline);
+}
+
+.pc-screen.active {
+    display: block;
+}
+
+/* --- MAIN SCREEN --- */
+.pc-grid-main {
+    width: 560px;
+    height: 255px;
+    position: relative;
+}
+
+/* Top Area: Camera Tile (352 x 198) */
+.pc-camera-tile {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 352px;
+    height: 198px;
+    background-color: var(--color-tile);
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pc-camera-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.pc-camera-off-face {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--color-text2);
+}
+
+.pc-camera-off-text {
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--color-text2);
+}
+
+/* Repair notification bar inside camera tile */
+.pc-repair-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 352px;
+    height: 64px;
+    background-color: var(--color-tile);
+    border-bottom: 1px solid var(--color-hairline);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 10px;
+    z-index: 10;
+}
+
+.pc-repair-text {
+    flex: 1;
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--color-text);
+}
+
+.pc-repair-btn {
+    width: 80px;
+    height: 32px;
+    background-color: var(--color-on);
+    color: var(--color-on-content);
+    border: none;
+    border-radius: 4px;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pc-repair-btn:active {
+    opacity: 0.8;
+}
+
+/* Mic Tile (103 x 98 at 353, 0) */
+.pc-mic-tile {
+    position: absolute;
+    top: 0;
+    left: 353px;
+    width: 103px;
+    height: 98px;
+    background-color: var(--color-tile);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background-color var(--motion-state), color var(--motion-state);
+}
+
+/* Speaker Tile (103 x 98 at 457, 0) */
+.pc-speaker-tile {
+    position: absolute;
+    top: 0;
+    left: 457px;
+    width: 103px;
+    height: 98px;
+    background-color: var(--color-tile);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background-color var(--motion-state), color var(--motion-state);
+}
+
+/* Feature tile typography */
+.pc-feature-header {
+    display: flex;
+    align-items: center;
+}
+
+.pc-feature-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pc-feature-title {
+    font-size: 14px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.pc-feature-state {
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--color-text);
+}
+
+/* Inactive / Dimmed */
+.pc-feature-dimmed {
+    color: var(--color-disabled) !important;
+}
+
+.pc-feature-dimmed .pc-feature-title,
+.pc-feature-dimmed .pc-feature-state,
+.pc-feature-dimmed svg {
+    color: var(--color-disabled) !important;
+    stroke: var(--color-disabled) !important;
+}
+
+/* Active / On: White fill, black glyph */
+.pc-feature-active {
+    background-color: var(--color-on) !important;
+    color: var(--color-on-content) !important;
+}
+
+.pc-feature-active .pc-feature-title,
+.pc-feature-active .pc-feature-state,
+.pc-feature-active svg {
+    color: var(--color-on-content) !important;
+    stroke: var(--color-on-content) !important;
+}
+
+/* Phone Tile (207 x 99 at 353, 99) */
+.pc-phone-tile {
+    position: absolute;
+    top: 99px;
+    left: 353px;
+    width: 207px;
+    height: 99px;
+    background-color: var(--color-tile);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+
+.pc-phone-name {
+    font-size: 14px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.pc-phone-state {
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--color-text2);
+}
+
+/* Bottom Row: 5 tiles at y = 199 (Height 56px) */
+.pc-bottom-btn {
+    position: absolute;
+    top: 199px;
+    height: 56px;
+    background-color: var(--color-tile);
+    border: none;
+    outline: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text);
+    transition: background-color var(--motion-state), color var(--motion-state);
+}
+
+.pc-bottom-btn:hover {
+    background-color: #141416;
+}
+
+.pc-btn-framing {
+    left: 0;
+    width: 111px;
+}
+
+.pc-btn-mirror {
+    left: 112px;
+    width: 111px;
+}
+
+.pc-btn-mirror.active {
+    background-color: var(--color-on);
+    color: var(--color-on-content);
+}
+
+.pc-btn-lens {
+    left: 224px;
+    width: 111px;
+}
+
+.pc-btn-settings {
+    left: 336px;
+    width: 111px;
+}
+
+.pc-btn-indicator {
+    left: 448px;
+    width: 112px;
+    cursor: default;
+}
+
+/* --- APPROVE GATE SCREEN --- */
+.pc-gate-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 560px;
+    height: 198px;
+    background-color: var(--color-tile);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+.pc-gate-title {
+    font-size: 14px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.pc-gate-subtitle {
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--color-text2);
+    margin-top: 2px;
+}
+
+.pc-gate-code {
+    margin-top: 20px;
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--color-text);
+    text-align: center;
+    letter-spacing: 0.15em;
+}
+
+.pc-gate-allow {
+    position: absolute;
+    top: 199px;
+    left: 0;
+    width: 279px;
+    height: 56px;
+    background-color: var(--color-on);
+    color: var(--color-on-content);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pc-gate-allow:active {
+    opacity: 0.85;
+}
+
+.pc-gate-deny {
+    position: absolute;
+    top: 199px;
+    left: 280px;
+    width: 280px;
+    height: 56px;
+    background-color: var(--color-tile);
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pc-gate-deny:active {
+    background-color: #141416;
+}
+
+/* --- PC SETTINGS SCREEN --- */
+.pc-settings-header {
+    height: 40px;
+    background-color: var(--color-tile);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.pc-settings-header:hover {
+    background-color: #141416;
+}
+
+.pc-settings-back-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.pc-settings-scroll {
+    height: 214px;
+    overflow-y: auto;
+    background-color: var(--color-hairline);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pc-set-row {
+    height: 32px;
+    min-height: 32px;
+    background-color: var(--color-tile);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.pc-set-row:hover:not(.pc-set-header) {
+    background-color: #121215;
+}
+
+.pc-set-header {
+    background-color: var(--color-bg);
+    cursor: default;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--color-text2);
+    text-transform: uppercase;
+}
+
+.pc-set-label {
+    color: var(--color-text);
+}
+
+.pc-set-val {
+    color: var(--color-text2);
+}
+
+.pc-set-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.pc-btn-action {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-hairline);
+    color: var(--color-text);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.pc-btn-action:hover {
+    border-color: #444;
+}

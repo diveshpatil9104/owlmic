@@ -1,46 +1,149 @@
-/* UI Prototype Base Styles */
+/* Owlmic UI Prototype - Design System Tokens & Base Styles
+   Conforms to design/tokens.json and docs/technical/design-language.md */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;500;600;700&display=swap');
+
+:root {
+    /* Color Palette */
+    --color-bg: #000000;
+    --color-tile: #0A0A0A;
+    --color-hairline: #262626;
+    --color-text: #FFFFFF;
+    --color-text2: #8E8E93;
+    --color-disabled: #3A3A3C;
+    --color-on: #FFFFFF;
+    --color-on-content: #000000;
+    --color-red: #FF453A;
+    --color-yellow: #FFD60A;
+    --color-green: #30D158;
+
+    /* Typography */
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+
+    /* Radii */
+    --radius-panel: 12px;
+    --radius-card: 16px;
+    --radius-phone: 44px;
+
+    /* Motion */
+    --motion-state: 150ms;
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
 body {
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     margin: 0;
     padding: 0;
-    /* Set body to slightly gray so the OLED black devices stand out */
-    background-color: #0A0A0A; 
-    color: #FFFFFF;
+    background-color: #0d0d0f;
+    color: var(--color-text);
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
-/* Controls Container (Top Right) */
+/* Controls Container (Top Bar) */
 .controls-container {
     position: fixed;
     top: 20px;
+    left: 20px;
     right: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
     z-index: 1000;
+}
+
+.controls-left, .controls-right {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Prototype Brand pill */
+.prototype-brand {
+    background: #141416;
+    border: 1px solid #28282c;
+    border-radius: 8px;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--color-text2);
+}
+
+.prototype-brand strong {
+    color: var(--color-text);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/* Scenario Selector */
+.scenario-bar {
+    background-color: #141416;
+    border: 1px solid #28282c;
+    border-radius: 8px;
+    padding: 4px;
+    display: flex;
+    gap: 2px;
+}
+
+.scenario-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text2);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.scenario-btn:hover {
+    color: var(--color-text);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.scenario-btn.active {
+    color: #000000;
+    background-color: #FFFFFF;
+    font-weight: 600;
 }
 
 /* Tab Bar */
 .tab-bar {
     display: flex;
     gap: 4px;
-    background-color: #1A1A1A;
-    padding: 6px;
+    background-color: #141416;
+    padding: 4px;
     border-radius: 8px;
-    border: 1px solid #333333;
+    border: 1px solid #28282c;
     position: relative;
 }
 
 /* The Sliding Indicator */
 .tab-indicator {
     position: absolute;
-    top: 6px; /* matching padding of tab-bar */
-    bottom: 6px;
+    top: 4px;
+    bottom: 4px;
     left: 0;
     width: 0;
-    background-color: #333333;
-    border-radius: 4px;
-    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    background-color: #2b2b30;
+    border-radius: 5px;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     z-index: 0;
 }
 
@@ -49,18 +152,21 @@ body {
     z-index: 1;
     background: transparent;
     border: none;
-    color: #8E8E93;
-    padding: 8px;
-    border-radius: 4px;
+    color: var(--color-text2);
+    padding: 8px 12px;
+    border-radius: 5px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
+    gap: 6px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    transition: color 0.15s;
 }
 
 .tab-btn:hover {
-    color: #FFFFFF;
+    color: var(--color-text);
 }
 
 .tab-btn.active {
@@ -73,7 +179,8 @@ body {
     justify-content: center;
     align-items: center;
     width: 100%;
-    height: 100%;
+    min-height: 100vh;
+    padding: 80px 20px 40px;
     position: relative;
 }
 
@@ -83,7 +190,7 @@ body {
     opacity: 0;
     pointer-events: none;
     transform: scale(0.97);
-    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -94,31 +201,39 @@ body {
     pointer-events: all;
     transform: scale(1);
     z-index: 1;
+    position: relative;
 }
 
 /* --- DEVICE CONTAINERS --- */
 .device-container {
-    background-color: #000000; /* OLED Black */
-    border: 1px solid #262626; /* Subtle hairline border */
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-hairline);
     overflow: hidden;
     position: relative;
-    /* No generic frame decorations, purely minimal */
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
 }
 
 .device-mobile {
     width: 375px;
     height: 812px;
-    border-radius: 40px;
+    border-radius: var(--radius-phone);
 }
 
 .device-mobile-horizontal {
     width: 812px;
     height: 375px;
-    border-radius: 40px;
+    border-radius: var(--radius-phone);
 }
 
 .device-pc {
-    width: 560px; /* Matched from tokens.json */
-    height: 255px; /* Matched from tokens.json */
-    border-radius: 12px;
+    width: 560px;
+    height: 255px;
+    border-radius: var(--radius-panel);
+}
+
+/* Pure functional icon styling */
+.icon-svg {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
 }
