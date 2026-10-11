@@ -1,35 +1,59 @@
 /* Owlmic Android APK UI Styles - Portrait
-   Conforms to android/app/src/main/java/com/owlmic/ui/MainScreen.kt and Theme.kt */
+   Conforms to android/app/src/main/java/com/owlmic/ui/MainScreen.kt and Theme.kt
+   Realistic modern phone chassis & edge-to-edge Compose bento layout */
 
-.mobile-phone-wrapper {
+/* Modern Phone Chassis */
+.device-mobile {
+    width: 385px;
+    height: 825px;
+    background: #17181c;
+    border: 1px solid #4a4d57;
+    border-radius: var(--radius-phone-shell);
+    padding: 10px;
+    box-shadow: 0 30px 75px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* Speaker slit on top bezel */
+.phone-speaker-slit {
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50px;
+    height: 3.5px;
+    background-color: #2a2c33;
+    border-radius: 2px;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* Punch-hole selfie camera */
+.phone-punch-hole {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 11px;
+    height: 11px;
+    background-color: #000000;
+    border: 1.5px solid #25262c;
+    border-radius: 50%;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* Screen container inside bezel */
+.mobile-phone-screen {
     width: 100%;
     height: 100%;
     background-color: var(--color-bg);
+    border-radius: var(--radius-phone-screen);
+    overflow: hidden;
+    position: relative;
     display: flex;
     flex-direction: column;
-    position: relative;
-    overflow: hidden;
-}
-
-/* Phone status bar simulation */
-.phone-status-bar {
-    height: 34px;
-    padding: 0 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-text);
-    z-index: 10;
-    background-color: var(--color-tile);
-}
-
-.phone-status-icons {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    opacity: 0.8;
 }
 
 /* Bento grid container */
@@ -44,12 +68,15 @@
 
 /* Header */
 .phone-header {
-    height: 56px;
+    height: 60px;
+    padding-top: 8px; /* space under punch-hole */
     background-color: var(--color-tile);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-left: 16px;
+    padding-left: 20px;
+    padding-right: 6px;
+    flex-shrink: 0;
 }
 
 .phone-wordmark {
@@ -61,15 +88,17 @@
 }
 
 .phone-icon-btn {
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
     background: transparent;
     border: none;
+    outline: none;
     color: var(--color-text);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    border-radius: 50%;
     transition: opacity var(--motion-state);
 }
 
@@ -77,9 +106,9 @@
     opacity: 0.6;
 }
 
-/* Camera Tile */
+/* Camera Tile (takes ~64% of flex area) */
 .phone-camera-tile {
-    flex: 1.7; /* ~64% share of middle area */
+    flex: 1.64;
     background-color: var(--color-tile);
     position: relative;
     cursor: pointer;
@@ -104,15 +133,15 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 12px;
+    padding: 14px;
 }
 
 .camera-flip-btn {
     pointer-events: auto;
     align-self: flex-end;
-    width: 40px;
-    height: 40px;
-    background-color: rgba(0, 0, 0, 0.8);
+    width: 42px;
+    height: 42px;
+    background-color: rgba(0, 0, 0, 0.85);
     border: 1px solid var(--color-hairline);
     border-radius: 8px;
     color: var(--color-text);
@@ -131,7 +160,7 @@
     align-self: flex-start;
     background-color: rgba(0, 0, 0, 0.85);
     border: 1px solid var(--color-hairline);
-    padding: 4px 8px;
+    padding: 5px 9px;
     border-radius: 4px;
     font-size: 12px;
     line-height: 16px;
@@ -139,7 +168,7 @@
     color: var(--color-text);
 }
 
-/* Feature Face (Off or inactive state) */
+/* Feature Face (Off state) */
 .feature-face {
     display: flex;
     flex-direction: column;
@@ -169,15 +198,14 @@
     color: var(--color-text2);
 }
 
-/* Audio Row */
+/* Audio Row (Mic & Speaker) */
 .phone-audio-row {
-    flex: 1; /* ~36% share of middle area */
+    flex: 1;
     display: flex;
     gap: 1px;
     background-color: var(--color-hairline);
 }
 
-/* Tile general */
 .phone-tile {
     flex: 1;
     background-color: var(--color-tile);
@@ -189,7 +217,7 @@
     transition: background-color var(--motion-state), color var(--motion-state);
 }
 
-/* ON State (White tile, inverted black glyphs) */
+/* ON State (White fill, black text/glyphs) */
 .phone-tile.is-on {
     background-color: var(--color-on);
     color: var(--color-on-content);
@@ -203,7 +231,7 @@
     stroke: var(--color-on-content) !important;
 }
 
-/* Live mic level meter bar */
+/* Live dynamic audio level meter along bottom edge */
 .phone-mic-meter {
     position: absolute;
     bottom: 0;
@@ -219,6 +247,7 @@
     display: flex;
     gap: 1px;
     background-color: var(--color-hairline);
+    flex-shrink: 0;
 }
 
 .phone-status-tile {
@@ -227,7 +256,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 0 16px;
+    padding: 0 18px;
     cursor: pointer;
 }
 
@@ -266,22 +295,6 @@
     flex-shrink: 0;
 }
 
-/* Phone bottom home pill bar */
-.phone-home-bar {
-    height: 20px;
-    background-color: var(--color-tile);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.phone-home-pill {
-    width: 72px;
-    height: 4px;
-    background-color: #3A3A3C;
-    border-radius: 2px;
-}
-
 /* --- SETTINGS SHEET --- */
 .phone-settings-sheet {
     position: absolute;
@@ -303,12 +316,14 @@
 }
 
 .settings-header {
-    height: 56px;
+    height: 60px;
+    padding-top: 8px;
     background-color: var(--color-tile);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-left: 16px;
+    padding-left: 18px;
+    padding-right: 6px;
     border-bottom: 1px solid var(--color-hairline);
     flex-shrink: 0;
 }
@@ -330,7 +345,7 @@
 
 .settings-section {
     background-color: var(--color-tile);
-    padding: 12px 16px;
+    padding: 14px 18px;
     display: flex;
     flex-direction: column;
     gap: 12px;

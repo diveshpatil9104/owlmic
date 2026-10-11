@@ -17,6 +17,9 @@
     --color-yellow: #FFD60A;
     --color-green: #30D158;
 
+    /* Mid-gray canvas background requested by user */
+    --color-canvas-bg: #35383f;
+
     /* Typography */
     --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
@@ -24,7 +27,8 @@
     /* Radii */
     --radius-panel: 12px;
     --radius-card: 16px;
-    --radius-phone: 44px;
+    --radius-phone-shell: 48px;
+    --radius-phone-screen: 38px;
 
     /* Motion */
     --motion-state: 150ms;
@@ -40,7 +44,7 @@ body {
     font-family: var(--font-sans);
     margin: 0;
     padding: 0;
-    background-color: #0d0d0f;
+    background-color: var(--color-canvas-bg);
     color: var(--color-text);
     display: flex;
     justify-content: center;
@@ -50,87 +54,23 @@ body {
     overflow-y: auto;
 }
 
-/* Controls Container (Top Bar) */
+/* Minimal Top Right Navigation Controls */
 .controls-container {
     position: fixed;
     top: 20px;
-    left: 20px;
     right: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    pointer-events: none;
     z-index: 1000;
-}
-
-.controls-left, .controls-right {
-    pointer-events: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-/* Prototype Brand pill */
-.prototype-brand {
-    background: #141416;
-    border: 1px solid #28282c;
-    border-radius: 8px;
-    padding: 6px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--color-text2);
-}
-
-.prototype-brand strong {
-    color: var(--color-text);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-/* Scenario Selector */
-.scenario-bar {
-    background-color: #141416;
-    border: 1px solid #28282c;
-    border-radius: 8px;
-    padding: 4px;
-    display: flex;
-    gap: 2px;
-}
-
-.scenario-btn {
-    background: transparent;
-    border: none;
-    color: var(--color-text2);
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
-    padding: 6px 10px;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.scenario-btn:hover {
-    color: var(--color-text);
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.scenario-btn.active {
-    color: #000000;
-    background-color: #FFFFFF;
-    font-weight: 600;
 }
 
 /* Tab Bar */
 .tab-bar {
     display: flex;
     gap: 4px;
-    background-color: #141416;
+    background-color: #1e2024;
     padding: 4px;
-    border-radius: 8px;
-    border: 1px solid #28282c;
+    border-radius: 10px;
+    border: 1px solid #444750;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     position: relative;
 }
 
@@ -141,8 +81,8 @@ body {
     bottom: 4px;
     left: 0;
     width: 0;
-    background-color: #2b2b30;
-    border-radius: 5px;
+    background-color: #383b42;
+    border-radius: 6px;
     transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     z-index: 0;
 }
@@ -152,21 +92,18 @@ body {
     z-index: 1;
     background: transparent;
     border: none;
-    color: var(--color-text2);
+    color: #9da0a8;
     padding: 8px 12px;
-    border-radius: 5px;
+    border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
+    justify-content: center;
     transition: color 0.15s;
 }
 
 .tab-btn:hover {
-    color: var(--color-text);
+    color: #FFFFFF;
 }
 
 .tab-btn.active {
@@ -180,7 +117,7 @@ body {
     align-items: center;
     width: 100%;
     min-height: 100vh;
-    padding: 80px 20px 40px;
+    padding: 60px 20px 40px;
     position: relative;
 }
 
@@ -206,34 +143,16 @@ body {
 
 /* --- DEVICE CONTAINERS --- */
 .device-container {
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-hairline);
     overflow: hidden;
     position: relative;
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
 }
 
-.device-mobile {
-    width: 375px;
-    height: 812px;
-    border-radius: var(--radius-phone);
-}
-
-.device-mobile-horizontal {
-    width: 812px;
-    height: 375px;
-    border-radius: var(--radius-phone);
-}
-
+/* PC Panel Container */
 .device-pc {
     width: 560px;
     height: 255px;
     border-radius: var(--radius-panel);
-}
-
-/* Pure functional icon styling */
-.icon-svg {
-    display: inline-block;
-    vertical-align: middle;
-    flex-shrink: 0;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-hairline);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }

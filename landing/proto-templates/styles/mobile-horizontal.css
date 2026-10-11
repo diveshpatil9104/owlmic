@@ -1,13 +1,57 @@
 /* Owlmic Android APK UI Styles - Horizontal / Landscape
-   Widescreen bento grid for desk webcam mount */
+   Realistic modern phone chassis & widescreen bento grid */
 
-.mobile-horiz-wrapper {
+/* Horizontal Phone Chassis */
+.device-mobile-horizontal {
+    width: 825px;
+    height: 385px;
+    background: #17181c;
+    border: 1px solid #4a4d57;
+    border-radius: var(--radius-phone-shell);
+    padding: 10px;
+    box-shadow: 0 30px 75px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* Speaker slit on left bezel */
+.phone-speaker-slit-horiz {
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3.5px;
+    height: 50px;
+    background-color: #2a2c33;
+    border-radius: 2px;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* Punch-hole camera on left */
+.phone-punch-hole-horiz {
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 11px;
+    height: 11px;
+    background-color: #000000;
+    border: 1.5px solid #25262c;
+    border-radius: 50%;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* Screen container inside bezel */
+.mobile-horiz-screen {
     width: 100%;
     height: 100%;
     background-color: var(--color-bg);
-    display: flex;
-    position: relative;
+    border-radius: var(--radius-phone-screen);
     overflow: hidden;
+    position: relative;
+    display: flex;
 }
 
 .horiz-bento-grid {
@@ -20,7 +64,7 @@
 
 /* Left side: Widescreen Camera Tile */
 .horiz-camera-tile {
-    flex: 1.65; /* ~505px wide */
+    flex: 1.65;
     background-color: var(--color-tile);
     position: relative;
     cursor: pointer;
@@ -39,7 +83,7 @@
 
 /* Right side: Controls Column */
 .horiz-controls-column {
-    flex: 1; /* ~306px wide */
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -48,7 +92,7 @@
 
 /* Header */
 .horiz-header {
-    height: 48px;
+    height: 50px;
     background-color: var(--color-tile);
     display: flex;
     justify-content: space-between;
@@ -86,7 +130,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 0 14px;
+    padding: 0 16px;
     cursor: pointer;
 }
 

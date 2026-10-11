@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const speakerState = root.querySelector('.js-mobile-speaker-state');
     const speakerDetail = root.querySelector('.js-mobile-speaker-detail');
 
+    const statusTile = root.querySelector('.js-mobile-status-tile');
     const statusPc = root.querySelector('.js-mobile-status-pc');
     const statusText = root.querySelector('.js-mobile-status-text');
     const indicatorIcon = root.querySelector('.js-mobile-indicator-icon');
@@ -30,8 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Register canvas with central renderer
     if (cameraCanvas) {
-        cameraCanvas.width = 375;
-        cameraCanvas.height = 360;
+        cameraCanvas.width = 365;
+        cameraCanvas.height = 430;
         OwlmicStore.registerCameraCanvas(cameraCanvas);
     }
 
@@ -62,6 +63,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Status tile tap cycles connection states for testing
+    if (statusTile) {
+        statusTile.addEventListener('click', () => {
+            const current = OwlmicStore.getState().connection;
+            if (current === 'connected') OwlmicStore.setConnectionState('approving');
+            else if (current === 'approving') OwlmicStore.setConnectionState('reconnecting');
+            else if (current === 'reconnecting') OwlmicStore.setConnectionState('not_connected');
+            else OwlmicStore.setConnectionState('connected');
+        });
+    }
+
     if (settingsBtn) {
         settingsBtn.addEventListener('click', () => {
             OwlmicStore.openMobileSettings(true);
@@ -80,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const btn = e.target.closest('.segmented-opt');
             if (!btn) return;
             const action = btn.dataset.action;
-            const val = btn.dataset.value;
             if (action === 'quality') OwlmicStore.cycleQuality();
             else if (action === 'fps') OwlmicStore.cycleFps();
             else if (action === 'noise') OwlmicStore.cycleNoiseReduction();

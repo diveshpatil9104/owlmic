@@ -12,58 +12,32 @@
     <link rel="stylesheet" href="styles/pc.css">
 </head>
 <body>
-    <!-- Top Bar Controls -->
+    <!-- Minimal Top Right View Controls -->
     <div class="controls-container">
-        <div class="controls-left">
-            <div class="prototype-brand">
-                <strong>owlmic</strong> UI Sandbox
-            </div>
-            <!-- Scenario Preset Switcher -->
-            <div class="scenario-bar">
-                <button class="scenario-btn active" data-scenario="connected">Connected</button>
-                <button class="scenario-btn" data-scenario="approving">Approve Gate</button>
-                <button class="scenario-btn" data-scenario="reconnecting">Reconnecting</button>
-                <button class="scenario-btn" data-scenario="repair">Needs Repair</button>
-                <button class="scenario-btn" data-scenario="not_connected">Disconnected</button>
-            </div>
-        </div>
-
-        <div class="controls-right">
-            <!-- View Tab Switcher -->
-            <div class="tab-bar">
-                <div class="tab-indicator"></div>
-                <button class="tab-btn active" data-target="view-mobile" title="Android Portrait">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-                    Mobile
-                </button>
-                <button class="tab-btn" data-target="view-mobile-horizontal" title="Android Landscape (Webcam Stand)">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="18" y1="12" x2="18.01" y2="12"></line></svg>
-                    Landscape
-                </button>
-                <button class="tab-btn" data-target="view-pc" title="Windows Tray Panel">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                    PC Panel
-                </button>
-            </div>
+        <div class="tab-bar">
+            <div class="tab-indicator"></div>
+            <button class="tab-btn active" data-target="view-mobile" title="Mobile (Portrait)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+            </button>
+            <button class="tab-btn" data-target="view-mobile-horizontal" title="Mobile (Landscape)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="18" y1="12" x2="18.01" y2="12"></line></svg>
+            </button>
+            <button class="tab-btn" data-target="view-pc" title="PC Panel">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </button>
         </div>
     </div>
 
     <!-- Container for the UI Views -->
     <div class="views-container">
         
-        <!-- 1. MOBILE PORTRAIT VIEW (Android APK - 375 x 812) -->
+        <!-- 1. MOBILE PORTRAIT VIEW (Android APK - 385 x 825) -->
         <div id="view-mobile" class="view active">
             <div class="device-container device-mobile">
-                <div class="mobile-phone-wrapper">
-                    <!-- Status Bar -->
-                    <div class="phone-status-bar">
-                        <span>9:41</span>
-                        <div class="phone-status-icons">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="16" height="10" rx="2" ry="2"/><line x1="22" y1="11" x2="22" y2="13"/></svg>
-                        </div>
-                    </div>
+                <div class="phone-speaker-slit"></div>
+                <div class="phone-punch-hole"></div>
 
+                <div class="mobile-phone-screen">
                     <!-- Bento Grid -->
                     <div class="phone-bento-grid">
                         <!-- Header -->
@@ -78,10 +52,8 @@
                         </div>
 
                         <!-- Camera Tile -->
-                        <div class="phone-camera-tile js-mobile-camera">
-                            <!-- Live Canvas Surface -->
+                        <div class="phone-camera-tile js-mobile-camera" title="Tap to turn Camera on/off">
                             <canvas class="phone-camera-canvas js-mobile-camera-canvas" style="display: none;"></canvas>
-                            <!-- Overlays when live -->
                             <div class="camera-preview-overlay js-mobile-camera-overlay" style="display: none;">
                                 <button class="camera-flip-btn js-mobile-flip" title="Flip camera">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -94,9 +66,8 @@
                                 </button>
                                 <div class="camera-caption-badge js-mobile-camera-caption">1080p · 30 fps</div>
                             </div>
-                            <!-- Face when OFF -->
                             <div class="feature-face js-mobile-camera-off">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
                                     <circle cx="12" cy="13" r="3"/>
                                 </svg>
@@ -108,7 +79,7 @@
                         <!-- Audio Row: Mic & Speaker -->
                         <div class="phone-audio-row">
                             <!-- Mic Tile -->
-                            <div class="phone-tile js-mobile-mic">
+                            <div class="phone-tile js-mobile-mic" title="Tap to turn Mic on/off">
                                 <div class="feature-face">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
@@ -122,7 +93,7 @@
                             </div>
 
                             <!-- Speaker Tile -->
-                            <div class="phone-tile js-mobile-speaker">
+                            <div class="phone-tile js-mobile-speaker" title="Tap to turn Speaker on/off">
                                 <div class="feature-face">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -138,7 +109,7 @@
 
                         <!-- Status Row -->
                         <div class="phone-status-row">
-                            <div class="phone-status-tile">
+                            <div class="phone-status-tile js-mobile-status-tile" title="Tap to cycle connection status">
                                 <div class="phone-status-pc js-mobile-status-pc">Workstation</div>
                                 <div class="phone-status-text js-mobile-status-text">Connected</div>
                             </div>
@@ -150,11 +121,6 @@
                                 </svg>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Home Bar -->
-                    <div class="phone-home-bar">
-                        <div class="phone-home-pill"></div>
                     </div>
 
                     <!-- Slide-up Settings Sheet -->
@@ -256,13 +222,16 @@
             </div>
         </div>
 
-        <!-- 2. MOBILE HORIZONTAL VIEW (Android APK Landscape - 812 x 375) -->
+        <!-- 2. MOBILE HORIZONTAL VIEW (Android APK Landscape - 825 x 385) -->
         <div id="view-mobile-horizontal" class="view hidden">
             <div class="device-container device-mobile-horizontal">
-                <div class="mobile-horiz-wrapper">
+                <div class="phone-speaker-slit-horiz"></div>
+                <div class="phone-punch-hole-horiz"></div>
+
+                <div class="mobile-horiz-screen">
                     <div class="horiz-bento-grid">
                         <!-- Widescreen Camera Tile -->
-                        <div class="horiz-camera-tile js-horiz-camera">
+                        <div class="horiz-camera-tile js-horiz-camera" title="Tap to turn Camera on/off">
                             <canvas class="horiz-camera-canvas js-horiz-camera-canvas" style="display: none;"></canvas>
                             <div class="camera-preview-overlay js-horiz-camera-overlay" style="display: none;">
                                 <button class="camera-flip-btn js-horiz-flip" title="Flip camera">
@@ -277,7 +246,7 @@
                                 <div class="camera-caption-badge js-horiz-camera-caption">1080p · 30 fps</div>
                             </div>
                             <div class="feature-face js-horiz-camera-off">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
                                     <circle cx="12" cy="13" r="3"/>
                                 </svg>
@@ -301,7 +270,7 @@
 
                             <!-- Audio Row -->
                             <div class="horiz-audio-row">
-                                <div class="phone-tile js-horiz-mic">
+                                <div class="phone-tile js-horiz-mic" title="Tap to turn Mic on/off">
                                     <div class="feature-face">
                                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
@@ -314,7 +283,7 @@
                                     <div class="phone-mic-meter js-horiz-mic-meter" style="display: none; width: 0%;"></div>
                                 </div>
 
-                                <div class="phone-tile js-horiz-speaker">
+                                <div class="phone-tile js-horiz-speaker" title="Tap to turn Speaker on/off">
                                     <div class="feature-face">
                                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -330,7 +299,7 @@
 
                             <!-- Status Row -->
                             <div class="horiz-status-row">
-                                <div class="horiz-status-tile">
+                                <div class="horiz-status-tile js-horiz-status-tile" title="Tap to cycle connection status">
                                     <div class="horiz-status-pc js-horiz-status-pc">Workstation</div>
                                     <div class="horiz-status-text js-horiz-status-text">Connected</div>
                                 </div>
@@ -385,7 +354,6 @@
                             <!-- Camera Tile (352 x 198) -->
                             <div class="pc-camera-tile js-pc-camera-tile" title="Toggle camera preview">
                                 <canvas class="pc-camera-canvas js-pc-camera-canvas" style="display: none;"></canvas>
-                                <!-- Camera off placeholder -->
                                 <div class="pc-camera-off-face js-pc-camera-off">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1m5 0h5a2 2 0 0 1 2 2v4l5-3v10l-2.5-1.5"/>
@@ -393,7 +361,6 @@
                                     </svg>
                                     <div class="pc-camera-off-text js-pc-camera-off-text">Camera off</div>
                                 </div>
-                                <!-- Repair bar -->
                                 <div class="pc-repair-bar js-pc-repair-bar" style="display: none;">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD60A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
@@ -562,20 +529,5 @@
     <script src="scripts/mobile.js"></script>
     <script src="scripts/mobile-horizontal.js"></script>
     <script src="scripts/pc.js"></script>
-
-    <!-- Preset Scenario Switching Script -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const scenarioBtns = document.querySelectorAll('.scenario-btn');
-            scenarioBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    scenarioBtns.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    const scenario = btn.getAttribute('data-scenario');
-                    OwlmicStore.setConnectionState(scenario);
-                });
-            });
-        });
-    </script>
 </body>
 </html>
