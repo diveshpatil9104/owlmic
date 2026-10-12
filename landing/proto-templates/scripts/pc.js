@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Main elements
     const cameraTile = root.querySelector('.js-pc-camera-tile');
     const cameraCanvas = root.querySelector('.js-pc-camera-canvas');
+    const cameraWatermark = root.querySelector('.js-pc-camera-watermark');
     const cameraOffFace = root.querySelector('.js-pc-camera-off');
     const cameraOffText = root.querySelector('.js-pc-camera-off-text');
     const repairBar = root.querySelector('.js-pc-repair-bar');
@@ -100,6 +101,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const btnIndicator = root.querySelector('.pc-btn-indicator');
+    if (btnIndicator) {
+        btnIndicator.addEventListener('click', () => {
+            const current = OwlmicStore.getState().connection;
+            if (current === 'connected') OwlmicStore.setConnectionState('approving');
+            else if (current === 'approving') OwlmicStore.setConnectionState('reconnecting');
+            else if (current === 'reconnecting') OwlmicStore.setConnectionState('not_connected');
+            else OwlmicStore.setConnectionState('connected');
+        });
+    }
+
     // Event listeners - Gate Screen
     if (gateAllow) {
         gateAllow.addEventListener('click', () => {
@@ -156,9 +168,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.camera && (state.connection === 'connected' || state.connection === 'repair')) {
             if (cameraCanvas) cameraCanvas.style.display = 'block';
             if (cameraOffFace) cameraOffFace.style.display = 'none';
+            if (cameraWatermark) cameraWatermark.style.display = 'none';
         } else {
             if (cameraCanvas) cameraCanvas.style.display = 'none';
             if (cameraOffFace) cameraOffFace.style.display = 'flex';
+            if (cameraWatermark) cameraWatermark.style.display = 'flex';
             if (cameraOffText) {
                 if (state.connection !== 'connected' && state.connection !== 'repair') {
                     cameraOffText.textContent = 'No phone connected';
@@ -181,25 +195,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mic Tile
         if (state.connection !== 'connected' && state.connection !== 'repair') {
             micTile.className = 'pc-mic-tile pc-feature-dimmed js-pc-mic-tile';
-            micState.textContent = 'Off';
+            if (micState) micState.textContent = 'Off';
         } else if (state.mic) {
-            micTile.className = 'pc-mic-tile pc-feature-active js-pc-mic-tile';
-            micState.textContent = 'On';
+            micTile.className = 'pc-mic-tile is-on pc-feature-active js-pc-mic-tile';
+            if (micState) micState.textContent = 'On';
         } else {
             micTile.className = 'pc-mic-tile js-pc-mic-tile';
-            micState.textContent = 'Off';
+            if (micState) micState.textContent = 'Off';
+        }
+
+        const micMeter = root.querySelector('.js-pc-mic-meter');
+        if (micMeter) {
+            micMeter.style.width = state.mic ? `${Math.min(100, Math.max(0, state.audioLevel * 100))}%` : '0%';
         }
 
         // Speaker Tile
         if (state.connection !== 'connected' && state.connection !== 'repair') {
             speakerTile.className = 'pc-speaker-tile pc-feature-dimmed js-pc-speaker-tile';
-            speakerState.textContent = 'Off';
+            if (speakerState) speakerState.textContent = 'Off';
         } else if (state.speaker) {
-            speakerTile.className = 'pc-speaker-tile pc-feature-active js-pc-speaker-tile';
-            speakerState.textContent = 'On';
+            speakerTile.className = 'pc-speaker-tile is-on pc-feature-active js-pc-speaker-tile';
+            if (speakerState) speakerState.textContent = 'On';
         } else {
             speakerTile.className = 'pc-speaker-tile js-pc-speaker-tile';
-            speakerState.textContent = 'Off';
+            if (speakerState) speakerState.textContent = 'Off';
         }
 
         // Phone Tile
@@ -211,11 +230,22 @@ document.addEventListener('DOMContentLoaded', () => {
             phoneState.textContent = 'Reconnecting';
         } else {
             phoneName.textContent = 'No phone connected';
-            phoneState.textContent = 'Open Owlmic on your phone';
+            phoneState.textContent = 'Disconnected';
+        }
+
+        const statusDot = root.querySelector('.js-pc-status-dot');
+        if (statusDot) {
+            statusDot.style.backgroundColor = state.connection === 'connected'
+                ? 'var(--color-green)'
+                : (state.connection === 'approving' || state.connection === 'reconnecting' || state.connection === 'repair')
+                ? 'var(--color-yellow)'
+                : 'var(--color-red)';
         }
 
         // Bottom row
-        if (btnFraming) btnFraming.textContent = state.cameraFraming;
+        const framingText = root.querySelector('.js-pc-btn-framing-text');
+        if (framingText) framingText.textContent = state.cameraFraming;
+
         if (btnMirror) {
             if (state.cameraMirror) {
                 btnMirror.classList.add('active');
@@ -223,7 +253,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnMirror.classList.remove('active');
             }
         }
-        if (btnLens) btnLens.textContent = `Lens: ${state.cameraLens}`;
+
+        const lensText = root.querySelector('.js-pc-btn-lens-text');
+        if (lensText) lensText.textContent = state.cameraLens;
 
         // Indicator
         if (indicatorIcon) {
@@ -234,6 +266,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 indicatorIcon.style.color = 'var(--color-red)';
             }
+        }
+
+        const indicatorText = root.querySelector('.js-pc-indicator-text');
+        if (indicatorText) {
+            indicatorText.textContent = state.connection === 'connected' ? 'Linked' : 'Offline';
         }
 
         // Gate Screen

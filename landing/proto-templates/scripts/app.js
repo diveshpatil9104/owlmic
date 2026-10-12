@@ -26,7 +26,6 @@
         speakerOutput: 'Phone speaker',
         pcScreen: 'main',        // 'main' | 'gate' | 'settings'
         mobileSettingsOpen: false,
-        mobileHorizontalSettingsOpen: false,
         repairing: false,
         pairedPhones: [
             { id: 'pixel-8', name: 'Pixel 8', blocked: false, current: true }
@@ -81,97 +80,56 @@
                 const w = canvas.width;
                 const h = canvas.height;
 
-                // Base room background
-                const grad = ctx.createLinearGradient(0, 0, w, h);
-                if (state.cameraLens === 'Front') {
-                    // Soft warm studio lighting
-                    grad.addColorStop(0, '#1c1c24');
-                    grad.addColorStop(0.5, '#121217');
-                    grad.addColorStop(1, '#0a0a0f');
-                } else {
-                    // Back lens scene
-                    grad.addColorStop(0, '#18201a');
-                    grad.addColorStop(0.5, '#0f1412');
-                    grad.addColorStop(1, '#080a09');
+                // Base dark camera background
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fillRect(0, 0, w, h);
+
+                // Preserved dotted background pattern (matching phone playground)
+                const dotSpacing = 18;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+                for (let dx = dotSpacing / 2; dx < w; dx += dotSpacing) {
+                    for (let dy = dotSpacing / 2; dy < h; dy += dotSpacing) {
+                        ctx.beginPath();
+                        ctx.arc(dx, dy, 1, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, w, h);
 
-                // Subtle ambient bokeh / lighting orbs
-                const x1 = w * 0.3 + Math.sin(time * 0.8) * (w * 0.05);
-                const y1 = h * 0.4 + Math.cos(time * 0.6) * (h * 0.05);
-                const r1 = Math.min(w, h) * 0.4;
-                const lightGrad = ctx.createRadialGradient(x1, y1, 10, x1, y1, r1);
-                lightGrad.addColorStop(0, state.cameraLens === 'Front' ? 'rgba(80, 100, 160, 0.18)' : 'rgba(70, 140, 100, 0.16)');
-                lightGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                ctx.fillStyle = lightGrad;
-                ctx.fillRect(0, 0, w, h);
+                // Check device mobile orientation if canvas is inside phone
+                const isPhoneCanvas = canvas.classList.contains('js-mobile-camera-canvas');
+                const deviceMobile = document.querySelector('.js-device-mobile');
+                const isLandscape = isPhoneCanvas && deviceMobile && deviceMobile.classList.contains('is-landscape');
 
-                // Subtle grid guidelines (rule of thirds)
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(w * 0.333, 0); ctx.lineTo(w * 0.333, h);
-                ctx.moveTo(w * 0.666, 0); ctx.lineTo(w * 0.666, h);
-                ctx.moveTo(0, h * 0.333); ctx.lineTo(w, h * 0.333);
-                ctx.moveTo(0, h * 0.666); ctx.lineTo(w, h * 0.666);
-                ctx.stroke();
+                // Draw clean person silhouette
+                ctx.save();
+                ctx.translate(w * 0.5, h * 0.5);
+                if (isLandscape) {
+                    ctx.rotate(Math.PI / 2); // 90deg rotation to remain upright when phone rotates -90deg
+                }
 
-                // Stylized subject silhouette / focus point
-                const cx = w * 0.5 + Math.sin(time * 0.4) * (w * 0.02);
-                const cy = h * 0.58;
-                const headR = Math.min(w, h) * 0.18;
+                // Smooth organic breathing / drift
+                const drift = Math.sin(time * 0.4) * 3;
+                const headRadius = isLandscape ? Math.min(w, h) * 0.15 : Math.min(w, h) * 0.17;
+                const headCenterY = -headRadius * 0.7 + drift;
+
+                // Minimal clean man silhouette color
+                ctx.fillStyle = '#1e1f26';
 
                 // Head
-                ctx.fillStyle = '#22232a';
                 ctx.beginPath();
-                ctx.arc(cx, cy - headR * 0.8, headR, 0, Math.PI * 2);
+                ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Shoulders
+                // Shoulders & Torso
+                const shoulderY = headCenterY + headRadius * 1.35;
+                const shoulderHalfWidth = headRadius * 1.9;
+                const torsoHeight = headRadius * 2.2;
+
                 ctx.beginPath();
-                ctx.ellipse(cx, cy + headR * 1.3, headR * 2.2, headR * 1.5, 0, 0, Math.PI * 2);
+                ctx.ellipse(0, shoulderY + torsoHeight * 0.5, shoulderHalfWidth, torsoHeight, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Focus reticle in center
-                const reticleX = cx;
-                const reticleY = cy - headR * 0.8;
-                const rSize = 14;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                // Corners
-                ctx.moveTo(reticleX - rSize, reticleY - rSize + 4);
-                ctx.lineTo(reticleX - rSize, reticleY - rSize);
-                ctx.lineTo(reticleX - rSize + 4, reticleY - rSize);
-
-                ctx.moveTo(reticleX + rSize - 4, reticleY - rSize);
-                ctx.lineTo(reticleX + rSize, reticleY - rSize);
-                ctx.lineTo(reticleX + rSize, reticleY - rSize + 4);
-
-                ctx.moveTo(reticleX - rSize, reticleY + rSize - 4);
-                ctx.lineTo(reticleX - rSize, reticleY + rSize);
-                ctx.lineTo(reticleX - rSize + 4, reticleY + rSize);
-
-                ctx.moveTo(reticleX + rSize - 4, reticleY + rSize);
-                ctx.lineTo(reticleX + rSize, reticleY + rSize);
-                ctx.lineTo(reticleX + rSize, reticleY + rSize - 4);
-                ctx.stroke();
-
-                // Small center green dot
-                ctx.fillStyle = '#30D158';
-                ctx.beginPath();
-                ctx.arc(reticleX, reticleY, 2, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Subtle film grain
-                const grainCount = Math.floor((w * h) / 1200);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-                for (let i = 0; i < grainCount; i++) {
-                    const gx = Math.random() * w;
-                    const gy = Math.random() * h;
-                    ctx.fillRect(gx, gy, 1, 1);
-                }
+                ctx.restore();
             });
         }
         requestAnimationFrame(renderCameras);
@@ -261,10 +219,6 @@
         },
         openMobileSettings: (open) => {
             state.mobileSettingsOpen = open;
-            notify();
-        },
-        openMobileHorizontalSettings: (open) => {
-            state.mobileHorizontalSettingsOpen = open;
             notify();
         },
         setPcScreen: (scr) => {

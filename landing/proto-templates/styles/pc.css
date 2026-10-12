@@ -46,11 +46,42 @@
     justify-content: center;
 }
 
+.pc-camera-tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+    background-size: 16px 16px;
+    background-position: center center;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.pc-camera-watermark {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.pc-camera-watermark svg {
+    width: 130px;
+    height: 130px;
+    color: #FFFFFF;
+    opacity: 0.04;
+    user-select: none;
+}
+
 .pc-camera-canvas {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+    position: relative;
+    z-index: 2;
 }
 
 .pc-camera-off-face {
@@ -60,7 +91,15 @@
     justify-content: center;
     gap: 8px;
     color: var(--color-text2);
+    position: relative;
+    z-index: 2;
 }
+
+.pc-cam-glyph {
+    opacity: 0.35;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
 
 .pc-camera-off-text {
     font-size: 13px;
@@ -119,12 +158,14 @@
     width: 103px;
     height: 98px;
     background-color: var(--color-tile);
-    padding: 12px;
+    padding: 12px 10px 8px;
     display: flex;
     flex-direction: column;
+    align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    transition: background-color var(--motion-state), color var(--motion-state);
+    box-sizing: border-box;
+    transition: background-color var(--motion-state);
 }
 
 /* Speaker Tile (103 x 98 at 457, 0) */
@@ -135,62 +176,99 @@
     width: 103px;
     height: 98px;
     background-color: var(--color-tile);
-    padding: 12px;
+    padding: 12px 10px 8px;
     display: flex;
     flex-direction: column;
+    align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    transition: background-color var(--motion-state), color var(--motion-state);
+    box-sizing: border-box;
+    transition: background-color var(--motion-state);
 }
 
-/* Feature tile typography */
-.pc-feature-header {
+
+.pc-tile-icon-wrap {
+    flex: 1;
     display: flex;
     align-items: center;
+    justify-content: center;
 }
 
-.pc-feature-info {
+.pc-tile-icon-wrap .pc-icon {
+    width: 30px;
+    height: 30px;
+    color: #FFFFFF !important;
+    stroke: #FFFFFF !important;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pc-mic-tile .icon-off,
+.pc-speaker-tile .icon-off {
+    display: block !important;
+    opacity: 0.32;
+}
+
+.pc-mic-tile .icon-on,
+.pc-speaker-tile .icon-on {
+    display: none !important;
+    opacity: 1 !important;
+}
+
+
+/* Active State (is-on) */
+.pc-mic-tile.is-on .icon-off,
+.pc-speaker-tile.is-on .icon-off {
+    display: none !important;
+}
+
+.pc-mic-tile.is-on .icon-on,
+.pc-speaker-tile.is-on .icon-on {
+    display: block !important;
+    opacity: 1 !important;
+}
+
+.pc-tile-footer {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0 4px;
 }
 
-.pc-feature-title {
-    font-size: 14px;
-    line-height: 18px;
+.pc-tile-label {
+    font-size: 11px;
     font-weight: 600;
-    color: var(--color-text);
+    letter-spacing: 0.04em;
+    color: var(--color-text2);
+    transition: color 0.15s ease;
 }
 
-.pc-feature-state {
-    font-size: 13px;
-    line-height: 17px;
-    color: var(--color-text);
+.pc-tile-sub {
+    font-size: 10px;
+    color: var(--color-disabled);
+    font-family: var(--font-mono);
+    transition: color 0.15s ease;
 }
 
-/* Inactive / Dimmed */
-.pc-feature-dimmed {
-    color: var(--color-disabled) !important;
+.pc-mic-tile.is-on .pc-tile-label,
+.pc-speaker-tile.is-on .pc-tile-label {
+    color: #FFFFFF;
 }
 
-.pc-feature-dimmed .pc-feature-title,
-.pc-feature-dimmed .pc-feature-state,
-.pc-feature-dimmed svg {
-    color: var(--color-disabled) !important;
-    stroke: var(--color-disabled) !important;
+.pc-mic-tile.is-on .pc-tile-sub,
+.pc-speaker-tile.is-on .pc-tile-sub {
+    color: var(--color-green);
 }
 
-/* Active / On: White fill, black glyph */
-.pc-feature-active {
-    background-color: var(--color-on) !important;
-    color: var(--color-on-content) !important;
-}
-
-.pc-feature-active .pc-feature-title,
-.pc-feature-active .pc-feature-state,
-.pc-feature-active svg {
-    color: var(--color-on-content) !important;
-    stroke: var(--color-on-content) !important;
+/* Live dynamic mic audio level bar */
+.pc-mic-meter-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background-color: var(--color-green);
+    width: 0%;
+    transition: width 0.08s linear;
 }
 
 /* Phone Tile (207 x 99 at 353, 99) */
@@ -201,11 +279,38 @@
     width: 207px;
     height: 99px;
     background-color: var(--color-tile);
-    padding: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-sizing: border-box;
+    transition: background-color var(--motion-state);
+}
+
+
+.pc-phone-icon-col {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background-color: #121318;
+    border: 1px solid #23252e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    flex-shrink: 0;
+}
+
+.pc-phone-icon-col svg {
+    color: #FFFFFF;
+    stroke: #FFFFFF;
+}
+
+.pc-phone-info-col {
     display: flex;
     flex-direction: column;
-    justify-content: center;
     gap: 4px;
+    overflow: hidden;
 }
 
 .pc-phone-name {
@@ -213,15 +318,33 @@
     line-height: 18px;
     font-weight: 600;
     color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pc-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pc-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-green);
+    flex-shrink: 0;
 }
 
 .pc-phone-state {
-    font-size: 13px;
-    line-height: 17px;
+    font-size: 12px;
+    line-height: 16px;
     color: var(--color-text2);
+    white-space: nowrap;
 }
 
-/* Bottom Row: 5 tiles at y = 199 (Height 56px) */
+/* Bottom Row: 5 icon-heavy action tiles at y = 199 (Height 56px) */
 .pc-bottom-btn {
     position: absolute;
     top: 199px;
@@ -230,18 +353,36 @@
     border: none;
     outline: none;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     cursor: pointer;
     font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--color-text);
+    color: var(--color-text2);
+    box-sizing: border-box;
+    padding: 6px 4px;
     transition: background-color var(--motion-state), color var(--motion-state);
 }
 
-.pc-bottom-btn:hover {
-    background-color: #141416;
+.pc-bottom-btn svg {
+    color: var(--color-text2);
+    stroke: var(--color-text2);
+    transition: color 0.15s ease, stroke 0.15s ease, transform 0.15s ease;
+}
+
+.pc-btn-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 14px;
+    color: var(--color-text2);
+    transition: color 0.15s ease;
+}
+
+
+.pc-bottom-btn:active {
+    background-color: #1a1b20;
 }
 
 .pc-btn-framing {
@@ -254,9 +395,19 @@
     width: 111px;
 }
 
+/* Active Mirror State */
 .pc-btn-mirror.active {
-    background-color: var(--color-on);
-    color: var(--color-on-content);
+    background-color: #161820;
+    color: #FFFFFF;
+}
+
+.pc-btn-mirror.active svg {
+    color: #FFFFFF;
+    stroke: #FFFFFF;
+}
+
+.pc-btn-mirror.active .pc-btn-label {
+    color: #FFFFFF;
 }
 
 .pc-btn-lens {
@@ -272,7 +423,7 @@
 .pc-btn-indicator {
     left: 448px;
     width: 112px;
-    cursor: default;
+    cursor: pointer;
 }
 
 /* --- APPROVE GATE SCREEN --- */
@@ -364,9 +515,6 @@
     cursor: pointer;
 }
 
-.pc-settings-header:hover {
-    background-color: #141416;
-}
 
 .pc-settings-back-title {
     font-size: 14px;
@@ -395,9 +543,6 @@
     cursor: pointer;
 }
 
-.pc-set-row:hover:not(.pc-set-header) {
-    background-color: #121215;
-}
 
 .pc-set-header {
     background-color: var(--color-bg);
@@ -432,6 +577,4 @@
     cursor: pointer;
 }
 
-.pc-btn-action:hover {
-    border-color: #444;
-}
+
