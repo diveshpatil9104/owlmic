@@ -6,29 +6,75 @@
     <title>Owlmic UI Prototype Sandbox</title>
     
     <!-- Base & Device Styles -->
-    <link rel="stylesheet" href="styles/main.css?v=8">
-    <link rel="stylesheet" href="styles/mobile.css?v=8">
-    <link rel="stylesheet" href="styles/pc.css?v=8">
+    <link rel="stylesheet" href="styles/main.css?v=22">
+    <link rel="stylesheet" href="styles/mobile.css?v=22">
+    <link rel="stylesheet" href="styles/pc.css?v=22">
 </head>
 <body>
-    <!-- Minimal Top Right View Controls -->
+    <!-- Sandbox Control Bar -->
     <div class="controls-container">
-        <div class="tab-bar">
-            <div class="tab-indicator"></div>
-            <button class="tab-btn active" data-target="phone-portrait" title="Mobile (Portrait)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+        <div class="control-pill-group">
+            <!-- Drag Handle for Toolbar Positioning -->
+            <button class="sim-btn sim-drag-handle js-toolbar-drag-handle" title="Drag toolbar anywhere" aria-label="Drag toolbar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="5" r="1"></circle>
+                    <circle cx="9" cy="12" r="1"></circle>
+                    <circle cx="9" cy="19" r="1"></circle>
+                    <circle cx="15" cy="5" r="1"></circle>
+                    <circle cx="15" cy="12" r="1"></circle>
+                    <circle cx="15" cy="19" r="1"></circle>
+                </svg>
             </button>
-            <button class="tab-btn" data-target="phone-landscape" title="Mobile (Landscape)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="18" y1="12" x2="18.01" y2="12"></line></svg>
+
+            <!-- Device Display Toggles (Mobile & PC) -->
+            <button class="sim-btn active js-toggle-phone" title="Mobile Phone (Click to toggle)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2"></rect>
+                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                </svg>
             </button>
-            <button class="tab-btn" data-target="pc" title="PC Panel">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            <button class="sim-btn active js-toggle-pc" title="PC Flyout (Click to toggle)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+            </button>
+
+            <div class="control-pill-divider"></div>
+
+            <!-- Rotate Phone -->
+            <button class="sim-btn js-btn-rotate-phone" title="Rotate Phone 90°">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+            </button>
+
+            <!-- Link Cycle -->
+            <button class="sim-btn js-btn-cycle-link" title="Link: Wi-Fi (Click to cycle)">
+                <span class="js-top-link-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                        <line x1="12" y1="20" x2="12.01" y2="20"/>
+                    </svg>
+                </span>
+            </button>
+
+            <!-- State Disturb Cycle -->
+            <button class="sim-btn js-btn-disturb" title="State: Connected (Click to cycle)">
+                <span class="js-top-state-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                        <path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+                    </svg>
+                </span>
             </button>
         </div>
     </div>
 
     <!-- Container for the UI Views -->
-    <div class="views-container">
+    <div class="views-container is-split-mode">
         
         <!-- 1. MOBILE PHONE VIEW (Single Device with Physical Rotation between Portrait & Landscape) -->
         <div id="view-phone" class="view active">
@@ -130,8 +176,135 @@
                                 <canvas class="phone-camera-canvas js-mobile-camera-canvas" style="display: none;"></canvas>
                                 <div class="playground-watermark js-playground-watermark" aria-hidden="true">
                                     <svg class="orient-icon" viewBox="0 0 100 100" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M 50 20 C 40 20, 28 10, 22 13 C 16 16, 15 32, 17 48 C 19 68, 32 84, 50 84 C 68 84, 81 68, 83 48 C 85 32, 84 16, 78 13 C 72 10, 60 20, 50 20 Z M 34 32 A 14 14 0 1 0 34 60 A 14 14 0 1 0 34 32 Z M 35 38 A 8.5 8.5 0 1 1 35 55 A 8.5 8.5 0 1 1 35 38 Z M 32.5 40 A 3 3 0 1 0 32.5 46 A 3 3 0 1 0 32.5 40 Z M 37.5 47.5 A 1.3 1.3 0 1 0 37.5 50.1 A 1.3 1.3 0 1 0 37.5 47.5 Z M 66 32 A 14 14 0 1 0 66 60 A 14 14 0 1 0 66 32 Z M 65 38 A 8.5 8.5 0 1 1 65 55 A 8.5 8.5 0 1 1 65 38 Z M 62.5 40 A 3 3 0 1 0 62.5 46 A 3 3 0 1 0 62.5 40 Z M 67.5 47.5 A 1.3 1.3 0 1 0 67.5 50.1 A 1.3 1.3 0 1 0 67.5 47.5 Z M 46 50 Q 50 51, 54 50 Q 52 61, 50 62 Q 48 61, 46 50 Z" />
+                                        <path fill-rule="evenodd" d="M 50 24 C 36 24, 25 16, 17 10 C 13 22, 11 38, 13 50 C 16 68, 32 84, 50 84 C 68 84, 84 68, 87 50 C 89 38, 87 22, 83 10 C 75 16, 64 24, 50 24 Z M 34 35.5 A 13.5 13.5 0 1 0 34 62.5 A 13.5 13.5 0 1 0 34 35.5 Z M 34 41.5 A 7.5 7.5 0 1 1 34 56.5 A 7.5 7.5 0 1 1 34 41.5 Z M 66 35.5 A 13.5 13.5 0 1 0 66 62.5 A 13.5 13.5 0 1 0 66 35.5 Z M 66 41.5 A 7.5 7.5 0 1 1 66 56.5 A 7.5 7.5 0 1 1 66 41.5 Z" />
                                     </svg>
+                                </div>
+                                <div class="playground-waveform-dock js-playground-waveform-dock" aria-label="Microphone Audio Waveform">
+                                    <div class="playground-waveform js-playground-waveform"></div>
+                                </div>
+
+                                <!-- Playground Drawer Overlay (Exact full height & width of playground) -->
+                                <div class="playground-drawer js-playground-drawer" aria-hidden="true">
+                                    <!-- Screen 1: Connection Settings -->
+                                    <div class="drawer-screen drawer-screen-wifi js-drawer-screen-wifi">
+                                        <div class="drawer-header">
+                                            <button class="drawer-back-btn js-drawer-back-btn" title="Back to Playground" aria-label="Back">
+                                                <svg class="orient-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                                                    <polyline points="12 19 5 12 12 5"></polyline>
+                                                </svg>
+                                            </button>
+                                            <span class="drawer-title">Connection Settings</span>
+                                        </div>
+                                        <div class="drawer-body">
+                                            <div class="drawer-section-label">PAIRED COMPUTERS</div>
+                                            <div class="drawer-pc-card is-active">
+                                                <div class="drawer-pc-icon">
+                                                    <svg class="orient-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                                    </svg>
+                                                </div>
+                                                <div class="drawer-pc-info">
+                                                    <div class="drawer-pc-name js-drawer-pc-name">Workstation</div>
+                                                    <div class="drawer-pc-status">
+                                                        <span class="pc-status-dot"></span>
+                                                        <span class="drawer-pc-status-text">Connected · 192.168.1.15</span>
+                                                    </div>
+                                                </div>
+                                                <div class="drawer-pc-action">
+                                                    <span class="drawer-badge-active">ACTIVE</span>
+                                                </div>
+                                            </div>
+                                            <div class="drawer-pc-card">
+                                                <div class="drawer-pc-icon">
+                                                    <svg class="orient-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+                                                        <line x1="2" y1="20" x2="22" y2="20"></line>
+                                                    </svg>
+                                                </div>
+                                                <div class="drawer-pc-info">
+                                                    <div class="drawer-pc-name">ThinkPad X1</div>
+                                                    <div class="drawer-pc-status">
+                                                        <span class="drawer-pc-status-text muted">Approved · TOFU Paired</span>
+                                                    </div>
+                                                </div>
+                                                <div class="drawer-pc-action">
+                                                    <button class="drawer-btn-ghost js-drawer-btn-connect" title="Connect">Connect</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="drawer-footer">
+                                            <div class="drawer-footer-title">Connection Types</div>
+                                            <div class="drawer-conn-types">
+                                                <button class="conn-type-btn is-on js-conn-type-btn" data-type="usb_debugging" title="USB Debugging (adb reverse)">
+                                                    <svg class="orient-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M10 13v5a2 2 0 0 0 4 0v-5"/>
+                                                        <rect width="8" height="6" x="8" y="7" rx="1"/>
+                                                        <path d="M9 7V4"/>
+                                                        <path d="M15 7V4"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-conn-type-btn" data-type="usb_tethering" title="USB Tethering">
+                                                    <svg class="orient-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-conn-type-btn" data-type="wifi" title="Wi-Fi (UDP :7655)">
+                                                    <svg class="orient-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                                                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                                                        <line x1="12" y1="20" x2="12.01" y2="20"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-conn-type-btn" data-type="bluetooth" title="Bluetooth RFCOMM (Audio only)">
+                                                    <svg class="orient-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="m7 7 10 10-5 5V2l5 5L7 17"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-conn-type-btn" data-type="direct_lan" title="Direct LAN / Hotspot">
+                                                    <svg class="orient-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M4.93 19.07A10 10 0 0 1 2 12a10 10 0 0 1 2.93-7.07"/>
+                                                        <path d="M19.07 4.93A10 10 0 0 1 22 12a10 10 0 0 1-2.93 7.07"/>
+                                                        <circle cx="12" cy="12" r="2"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Screen 2: Help & Information -->
+                                    <div class="drawer-screen drawer-screen-help js-drawer-screen-help" style="display: none;">
+                                        <div class="drawer-header">
+                                            <button class="drawer-back-btn js-drawer-back-btn" title="Back to Playground" aria-label="Back">
+                                                <svg class="orient-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                                                    <polyline points="12 19 5 12 12 5"></polyline>
+                                                </svg>
+                                            </button>
+                                            <span class="drawer-title">Help & Info</span>
+                                        </div>
+                                        <div class="drawer-body">
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Zero-Latency Links</div>
+                                                <div class="drawer-info-text">Automatic link priority: USB Debugging (1) > USB Tethering (2) > Wi-Fi (3) > Bluetooth RFCOMM (4).</div>
+                                            </div>
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Audio & Video Engine</div>
+                                                <div class="drawer-info-text">48kHz PCM mic capture, GPU-accelerated H.264 camera streaming, and WASAPI stereo speaker loopback.</div>
+                                            </div>
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Security & Pairing</div>
+                                                <div class="drawer-info-text">Trust-on-First-Use (TOFU) host verification with P-256 ECDH wireless session encryption.</div>
+                                            </div>
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Network Ports</div>
+                                                <div class="drawer-info-text">TCP :7653 (Control) · UDP :7654 (Discovery) · UDP :7655 (Media)</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -185,239 +358,195 @@
             </div>
         </div>
 
+
         <!-- 2. PC WIN32 FLYOUT PANEL VIEW (owlmic.exe - 560 x 255) -->
-        <div id="view-pc" class="view">
+        <div id="view-pc" class="view active">
             <div class="device-pc">
                 <div class="pc-panel-wrapper">
                     
                     <!-- Screen 1: Main Panel -->
                     <div class="pc-screen pc-screen-main active js-pc-screen-main">
-                        <div class="pc-grid-main">
-                            <!-- Camera Tile (352 x 198) -->
-                            <div class="pc-camera-tile js-pc-camera-tile" title="Toggle camera preview">
+                        <div class="pc-grid-bento">
+                            <!-- 1. BIG PLAYGROUND (Top) -->
+                            <div class="pc-playground-tile js-pc-camera-tile">
                                 <canvas class="pc-camera-canvas js-pc-camera-canvas" style="display: none;"></canvas>
-                                <div class="pc-camera-watermark js-pc-camera-watermark" aria-hidden="true">
+                                <div class="pc-playground-watermark js-pc-camera-watermark" aria-hidden="true">
                                     <svg viewBox="0 0 100 100" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M 50 20 C 40 20, 28 10, 22 13 C 16 16, 15 32, 17 48 C 19 68, 32 84, 50 84 C 68 84, 81 68, 83 48 C 85 32, 84 16, 78 13 C 72 10, 60 20, 50 20 Z M 34 32 A 14 14 0 1 0 34 60 A 14 14 0 1 0 34 32 Z M 35 38 A 8.5 8.5 0 1 1 35 55 A 8.5 8.5 0 1 1 35 38 Z M 32.5 40 A 3 3 0 1 0 32.5 46 A 3 3 0 1 0 32.5 40 Z M 37.5 47.5 A 1.3 1.3 0 1 0 37.5 50.1 A 1.3 1.3 0 1 0 37.5 47.5 Z M 66 32 A 14 14 0 1 0 66 60 A 14 14 0 1 0 66 32 Z M 65 38 A 8.5 8.5 0 1 1 65 55 A 8.5 8.5 0 1 1 65 38 Z M 62.5 40 A 3 3 0 1 0 62.5 46 A 3 3 0 1 0 62.5 40 Z M 67.5 47.5 A 1.3 1.3 0 1 0 67.5 50.1 A 1.3 1.3 0 1 0 67.5 47.5 Z M 46 50 Q 50 51, 54 50 Q 52 61, 50 62 Q 48 61, 46 50 Z" />
+                                        <path fill-rule="evenodd" d="M 50 24 C 36 24, 25 16, 17 10 C 13 22, 11 38, 13 50 C 16 68, 32 84, 50 84 C 68 84, 84 68, 87 50 C 89 38, 87 22, 83 10 C 75 16, 64 24, 50 24 Z M 34 35.5 A 13.5 13.5 0 1 0 34 62.5 A 13.5 13.5 0 1 0 34 35.5 Z M 34 41.5 A 7.5 7.5 0 1 1 34 56.5 A 7.5 7.5 0 1 1 34 41.5 Z M 66 35.5 A 13.5 13.5 0 1 0 66 62.5 A 13.5 13.5 0 1 0 66 35.5 Z M 66 41.5 A 7.5 7.5 0 1 1 66 56.5 A 7.5 7.5 0 1 1 66 41.5 Z" />
                                     </svg>
                                 </div>
-                                <div class="pc-camera-off-face js-pc-camera-off">
-                                    <svg class="pc-cam-glyph" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <!-- Centered or Docked Audio Waveform Dock (Matches mobile playground) -->
+                                <div class="pc-waveform-dock js-pc-waveform-dock">
+                                    <div class="pc-waveform js-pc-waveform"></div>
+                                </div>
+
+                                <!-- PC Playground Drawer Overlay -->
+                                <div class="pc-playground-drawer js-pc-playground-drawer" aria-hidden="true">
+                                    <!-- Screen 1: Connection Settings -->
+                                    <div class="drawer-screen drawer-screen-wifi js-pc-drawer-screen-wifi">
+                                        <div class="drawer-header">
+                                            <button class="drawer-back-btn js-pc-drawer-back-btn" title="Back to Playground" aria-label="Back">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                                                    <polyline points="12 19 5 12 12 5"></polyline>
+                                                </svg>
+                                            </button>
+                                            <span class="drawer-title">Connection Settings</span>
+                                        </div>
+                                        <div class="drawer-body">
+                                            <div class="drawer-section-label">CONNECTED DEVICE</div>
+                                            <div class="drawer-pc-card is-active">
+                                                <div class="drawer-pc-icon">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <rect width="14" height="20" x="5" y="2" rx="3"></rect>
+                                                        <path d="M12 18h.01"></path>
+                                                    </svg>
+                                                </div>
+                                                <div class="drawer-pc-info">
+                                                    <div class="drawer-pc-name js-pc-drawer-phone-name">Pixel 8</div>
+                                                    <div class="drawer-pc-status">
+                                                        <span class="pc-status-dot"></span>
+                                                        <span class="drawer-pc-status-text">Connected · 192.168.1.15</span>
+                                                    </div>
+                                                </div>
+                                                <div class="drawer-pc-action">
+                                                    <span class="drawer-badge-active">ACTIVE</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="drawer-footer">
+                                            <div class="drawer-footer-title">Connection Types</div>
+                                            <div class="drawer-conn-types">
+                                                <button class="conn-type-btn is-on js-pc-conn-type-btn" data-type="usb_debugging" title="USB Debugging (adb reverse)">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M10 13v5a2 2 0 0 0 4 0v-5"/>
+                                                        <rect width="8" height="6" x="8" y="7" rx="1"/>
+                                                        <path d="M9 7V4"/>
+                                                        <path d="M15 7V4"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-pc-conn-type-btn" data-type="usb_tethering" title="USB Tethering">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-pc-conn-type-btn" data-type="wifi" title="Wi-Fi (UDP :7655)">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                                                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                                                        <line x1="12" y1="20" x2="12.01" y2="20"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-pc-conn-type-btn" data-type="bluetooth" title="Bluetooth RFCOMM (Audio only)">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="m7 7 10 10-5 5V2l5 5L7 17"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="conn-type-btn is-on js-pc-conn-type-btn" data-type="direct_lan" title="Direct LAN / Hotspot">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M4.93 19.07A10 10 0 0 1 2 12a10 10 0 0 1 2.93-7.07"/>
+                                                        <path d="M19.07 4.93A10 10 0 0 1 22 12a10 10 0 0 1-2.93 7.07"/>
+                                                        <circle cx="12" cy="12" r="2"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Screen 2: Help & Information -->
+                                    <div class="drawer-screen drawer-screen-help js-pc-drawer-screen-help" style="display: none;">
+                                        <div class="drawer-header">
+                                            <button class="drawer-back-btn js-pc-drawer-back-btn" title="Back to Playground" aria-label="Back">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                                                    <polyline points="12 19 5 12 12 5"></polyline>
+                                                </svg>
+                                            </button>
+                                            <span class="drawer-title">Help & Info</span>
+                                        </div>
+                                        <div class="drawer-body">
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Zero-Latency Links</div>
+                                                <div class="drawer-info-text">Auto link priority: USB Debugging (1) > USB Tethering (2) > Wi-Fi (3) > Bluetooth RFCOMM (4).</div>
+                                            </div>
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Audio & Video Engine</div>
+                                                <div class="drawer-info-text">48kHz PCM mic capture, GPU-accelerated H.264 camera streaming, and WASAPI stereo speaker loopback.</div>
+                                            </div>
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Security & Pairing</div>
+                                                <div class="drawer-info-text">Trust-on-First-Use (TOFU) host verification with P-256 ECDH wireless session encryption.</div>
+                                            </div>
+                                            <div class="drawer-info-card">
+                                                <div class="drawer-info-title">Network Ports</div>
+                                                <div class="drawer-info-text">TCP :7653 (Control) · UDP :7654 (Discovery) · UDP :7655 (Media)</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. FIVE SQUARES IN A SINGLE LINE (Bottom: Help, Camera, Mic, Speaker, Wi-Fi) -->
+                            <div class="pc-bottom-bar">
+                                <!-- Square 1: Help / Information -->
+                                <button class="pc-square-btn js-pc-btn-help" title="Help & Information">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M 9.09 9.5 a 3 3 0 0 1 5.82 1 c 0 2 -2.91 3 -2.91 3.5"/>
+                                        <line x1="12" y1="17.5" x2="12.01" y2="17.5"/>
+                                    </svg>
+                                </button>
+
+                                <!-- Square 2: Camera -->
+                                <button class="pc-square-btn js-pc-btn-cam" title="Toggle Camera">
+                                    <svg class="icon-off" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="1" y1="1" x2="23" y2="23"/>
                                         <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2.5 3H21a2 2 0 0 1 2 2v7.5"/>
                                         <circle cx="12" cy="13" r="3"/>
                                     </svg>
-                                    <div class="pc-camera-off-text js-pc-camera-off-text">Camera off</div>
-                                </div>
-                                <div class="pc-repair-bar js-pc-repair-bar" style="display: none;">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD60A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-                                        <line x1="12" y1="9" x2="12" y2="13"/>
-                                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    <svg class="icon-on" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                        <circle cx="12" cy="13" r="4"/>
                                     </svg>
-                                    <div class="pc-repair-text">Owlmic Cam needs a repair</div>
-                                    <button class="pc-repair-btn js-pc-repair-btn">Repair</button>
-                                </div>
-                            </div>
+                                </button>
 
-                            <!-- Mic Tile (103 x 98) -->
-                            <div class="pc-mic-tile js-pc-mic-tile" title="Toggle microphone" aria-label="Microphone">
-                                <div class="pc-tile-icon-wrap">
-                                    <svg class="pc-icon icon-off" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <!-- Square 3: Mic -->
+                                <button class="pc-square-btn js-pc-btn-mic" title="Toggle Microphone">
+                                    <svg class="icon-off" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="1" y1="1" x2="23" y2="23"/>
                                         <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
                                         <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/>
                                         <line x1="12" y1="19" x2="12" y2="22"/>
                                     </svg>
-                                    <svg class="pc-icon icon-on" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg class="icon-on" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
                                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                                         <line x1="12" y1="19" x2="12" y2="22"/>
                                     </svg>
-                                </div>
-                                <div class="pc-tile-footer">
-                                    <span class="pc-tile-label">MIC</span>
-                                    <span class="pc-tile-sub js-pc-mic-state">Off</span>
-                                </div>
-                                <div class="pc-mic-meter-bar js-pc-mic-meter"></div>
-                            </div>
+                                </button>
 
-                            <!-- Speaker Tile (103 x 98) -->
-                            <div class="pc-speaker-tile js-pc-speaker-tile" title="Toggle speaker audio" aria-label="Speaker">
-                                <div class="pc-tile-icon-wrap">
-                                    <svg class="pc-icon icon-off" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <!-- Square 4: Speaker -->
+                                <button class="pc-square-btn js-pc-btn-spk" title="Toggle Speaker">
+                                    <svg class="icon-off" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                                         <line x1="23" y1="9" x2="17" y2="15"/>
                                         <line x1="17" y1="9" x2="23" y2="15"/>
                                     </svg>
-                                    <svg class="pc-icon icon-on" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg class="icon-on" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                                         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
                                         <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
                                     </svg>
-                                </div>
-                                <div class="pc-tile-footer">
-                                    <span class="pc-tile-label">SPEAKER</span>
-                                    <span class="pc-tile-sub js-pc-speaker-state">Off</span>
-                                </div>
-                            </div>
+                                </button>
 
-                            <!-- Phone Tile (207 x 99) -->
-                            <div class="pc-phone-tile">
-                                <div class="pc-phone-icon-col">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                        <rect width="14" height="20" x="5" y="2" rx="3"/>
-                                        <path d="M12 18h.01"/>
-                                        <line x1="9" y1="5" x2="15" y2="5"/>
+                                <!-- Square 5: Wi-Fi / Link Settings -->
+                                <button class="pc-square-btn js-pc-btn-wifi js-pc-btn-settings" title="Link Status / Settings">
+                                    <svg class="js-pc-indicator-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M5 10.36a10 10 0 0 1 14 0"/>
+                                        <path d="M8.5 13.93a5 5 0 0 1 7 0"/>
+                                        <line x1="12" y1="17.5" x2="12.01" y2="17.5"/>
                                     </svg>
-                                </div>
-                                <div class="pc-phone-info-col">
-                                    <div class="pc-phone-name js-pc-phone-name">Pixel 8</div>
-                                    <div class="pc-status-badge">
-                                        <span class="pc-status-dot js-pc-status-dot"></span>
-                                        <span class="pc-phone-state js-pc-phone-state">Connected</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Bottom Row: 5 tiles (y = 199, height 56px) -->
-                            <button class="pc-bottom-btn pc-btn-framing js-pc-btn-framing" title="Camera Framing">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-                                    <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-                                    <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-                                    <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-                                    <rect width="10" height="6" x="7" y="9" rx="1"/>
-                                </svg>
-                                <span class="pc-btn-label js-pc-btn-framing-text">Fill</span>
-                            </button>
-                            <button class="pc-bottom-btn pc-btn-mirror js-pc-btn-mirror" title="Mirror Video">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="m3 7 5 5-5 5V7z"/>
-                                    <path d="m21 7-5 5 5 5V7z"/>
-                                    <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/>
-                                </svg>
-                                <span class="pc-btn-label">Mirror</span>
-                            </button>
-                            <button class="pc-bottom-btn pc-btn-lens js-pc-btn-lens" title="Switch Lens">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>
-                                    <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/>
-                                    <path d="m17 2 3 3-3 3"/>
-                                    <path d="m7 22-3-3 3-3"/>
-                                </svg>
-                                <span class="pc-btn-label js-pc-btn-lens-text">Back</span>
-                            </button>
-                            <button class="pc-bottom-btn pc-btn-settings js-pc-btn-settings" title="Settings">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="3"/>
-                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                                </svg>
-                                <span class="pc-btn-label">Settings</span>
-                            </button>
-                            <button class="pc-bottom-btn pc-btn-indicator js-pc-btn-indicator" title="Link Status">
-                                <svg class="js-pc-indicator-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-green);">
-                                    <path d="M5 12.859a10 10 0 0 1 14 0"/>
-                                    <path d="M8.5 16.429a5 5 0 0 1 7 0"/>
-                                    <line x1="12" y1="20" x2="12.01" y2="20"/>
-                                </svg>
-                                <span class="pc-btn-label js-pc-indicator-text">Wi-Fi</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Screen 2: Approve Gate (When incoming connection requests trust) -->
-                    <div class="pc-screen pc-screen-gate js-pc-screen-gate">
-                        <div class="pc-gate-top">
-                            <div class="pc-gate-title js-pc-gate-title">Pixel 8 wants to connect</div>
-                            <div class="pc-gate-subtitle">Check the code on your phone</div>
-                            <div class="pc-gate-code js-pc-gate-code">4821</div>
-                        </div>
-                        <div class="pc-gate-allow js-pc-gate-allow">Allow</div>
-                        <div class="pc-gate-deny js-pc-gate-deny">Deny</div>
-                    </div>
-
-                    <!-- Screen 3: PC Settings List Screen -->
-                    <div class="pc-screen pc-screen-settings js-pc-screen-settings">
-                        <div class="pc-settings-header js-pc-settings-back">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="19" y1="12" x2="5" y2="12"/>
-                                <polyline points="12 19 5 12 12 5"/>
-                            </svg>
-                            <div class="pc-settings-back-title">Settings</div>
-                        </div>
-                        <div class="pc-settings-scroll js-pc-settings-scroll">
-                            <div class="pc-set-row pc-set-header">MIC</div>
-                            <div class="pc-set-row" data-setting="noise">
-                                <span class="pc-set-label">Noise reduction</span>
-                                <span class="pc-set-val js-pc-val-noise">Phone</span>
-                            </div>
-                            <div class="pc-set-row" data-setting="boost">
-                                <span class="pc-set-label">Boost</span>
-                                <span class="pc-set-val js-pc-val-boost">Off</span>
-                            </div>
-
-                            <div class="pc-set-row pc-set-header">CAMERA</div>
-                            <div class="pc-set-row" data-setting="quality">
-                                <span class="pc-set-label">Quality</span>
-                                <span class="pc-set-val js-pc-val-quality">Auto</span>
-                            </div>
-                            <div class="pc-set-row" data-setting="fps">
-                                <span class="pc-set-label">Frame rate</span>
-                                <span class="pc-set-val js-pc-val-fps">30</span>
-                            </div>
-
-                            <div class="pc-set-row pc-set-header">SPEAKER</div>
-                            <div class="pc-set-row" data-setting="speaker">
-                                <span class="pc-set-label">Quiet PC speakers</span>
-                                <span class="pc-set-val">Off</span>
-                            </div>
-
-                            <div class="pc-set-row pc-set-header">CONNECTION</div>
-                            <div class="pc-set-row" data-setting="usb">
-                                <span class="pc-set-label">USB debugging</span>
-                                <span class="pc-set-val">On</span>
-                            </div>
-                            <div class="pc-set-row" data-setting="wifi">
-                                <span class="pc-set-label">Wi-Fi</span>
-                                <span class="pc-set-val">On</span>
-                            </div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">This PC's addresses</span>
-                                <span class="pc-set-val">192.168.1.15</span>
-                            </div>
-
-                            <div class="pc-set-row pc-set-header">PHONES</div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">Pixel 8</span>
-                                <div class="pc-set-actions">
-                                    <button class="pc-btn-action">Remove</button>
-                                    <button class="pc-btn-action">Block</button>
-                                </div>
-                            </div>
-
-                            <div class="pc-set-row pc-set-header">GENERAL</div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">Start with Windows</span>
-                                <span class="pc-set-val">On</span>
-                            </div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">Repair Owlmic Mic and Cam</span>
-                                <span class="pc-set-val"></span>
-                            </div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">Quit Owlmic</span>
-                                <span class="pc-set-val"></span>
-                            </div>
-
-                            <div class="pc-set-row pc-set-header">ABOUT</div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">Owlmic 1.0.0</span>
-                                <span class="pc-set-val">MIT</span>
-                            </div>
-                            <div class="pc-set-row">
-                                <span class="pc-set-label">owlmic.app</span>
-                                <span class="pc-set-val"></span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -427,9 +556,9 @@
     </div>
     
     <!-- Scripts -->
-    <script src="scripts/app.js?v=8"></script>
-    <script src="scripts/tabs.js?v=8"></script>
-    <script src="scripts/mobile.js?v=8"></script>
-    <script src="scripts/pc.js?v=8"></script>
+    <script src="scripts/app.js?v=22"></script>
+    <script src="scripts/tabs.js?v=22"></script>
+    <script src="scripts/mobile.js?v=22"></script>
+    <script src="scripts/pc.js?v=22"></script>
 </body>
 </html>

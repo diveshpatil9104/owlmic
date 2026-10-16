@@ -224,67 +224,198 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Status/WiFi tile tap toggles on/off exclusively (and cycles state if turned on)
+    // Playground Drawer elements (Connection Settings & Help)
+    const playgroundDrawer = root.querySelector('.js-playground-drawer');
+    const drawerScreenWifi = root.querySelector('.js-drawer-screen-wifi');
+    const drawerScreenHelp = root.querySelector('.js-drawer-screen-help');
+    const drawerBackBtns = root.querySelectorAll('.js-drawer-back-btn');
+    const connTypeBtns = root.querySelectorAll('.js-conn-type-btn');
+    const drawerPcName = root.querySelector('.js-drawer-pc-name');
+
+    function openWifiDrawer() {
+        if (!playgroundDrawer) return;
+        if (helpBtn) helpBtn.classList.remove('is-on');
+        if (statusTile) statusTile.classList.add('is-on');
+        if (drawerScreenWifi) drawerScreenWifi.style.display = 'flex';
+        if (drawerScreenHelp) drawerScreenHelp.style.display = 'none';
+        playgroundDrawer.classList.add('is-open');
+    }
+
+    function openHelpDrawer() {
+        if (!playgroundDrawer) return;
+        if (statusTile) statusTile.classList.remove('is-on');
+        if (helpBtn) helpBtn.classList.add('is-on');
+        if (drawerScreenHelp) drawerScreenHelp.style.display = 'flex';
+        if (drawerScreenWifi) drawerScreenWifi.style.display = 'none';
+        playgroundDrawer.classList.add('is-open');
+    }
+
+    function closeDrawer() {
+        if (!playgroundDrawer) return;
+        playgroundDrawer.classList.remove('is-open');
+        if (statusTile) statusTile.classList.remove('is-on');
+        if (helpBtn) helpBtn.classList.remove('is-on');
+    }
+
+    // Status/WiFi tile tap: toggles Wi-Fi drawer (Connection Settings)
     if (statusTile) {
         statusTile.addEventListener('click', (e) => {
             e.stopPropagation();
-            const willBeOn = !statusTile.classList.contains('is-on');
-            // Exclusive toggle: one can be turned on at a time
-            if (helpBtn) helpBtn.classList.remove('is-on');
             if (notifShade) notifShade.classList.remove('is-open');
-
-            if (willBeOn) {
-                statusTile.classList.add('is-on');
+            const isWifiOpen = playgroundDrawer && playgroundDrawer.classList.contains('is-open') && 
+                               drawerScreenWifi && drawerScreenWifi.style.display !== 'none';
+            if (isWifiOpen) {
+                closeDrawer();
             } else {
-                statusTile.classList.remove('is-on');
+                openWifiDrawer();
             }
-
-            // Cycle connection state
-            const current = OwlmicStore.getState().connection;
-            if (current === 'connected') OwlmicStore.setConnectionState('approving');
-            else if (current === 'approving') OwlmicStore.setConnectionState('reconnecting');
-            else if (current === 'reconnecting') OwlmicStore.setConnectionState('not_connected');
-            else OwlmicStore.setConnectionState('connected');
         });
     }
 
+    // Help tile tap: toggles Help drawer
     if (helpBtn) {
         helpBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const willBeOn = !helpBtn.classList.contains('is-on');
-            // Exclusive toggle: one can be turned on at a time
-            if (statusTile) statusTile.classList.remove('is-on');
-            if (willBeOn) {
-                helpBtn.classList.add('is-on');
+            if (notifShade) notifShade.classList.remove('is-open');
+            const isHelpOpen = playgroundDrawer && playgroundDrawer.classList.contains('is-open') && 
+                               drawerScreenHelp && drawerScreenHelp.style.display !== 'none';
+            if (isHelpOpen) {
+                closeDrawer();
             } else {
-                helpBtn.classList.remove('is-on');
+                openHelpDrawer();
             }
         });
     }
 
+    // Drawer back button
+    drawerBackBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeDrawer();
+        });
+    });
+
+    // Connection types toggleable buttons (all start toggled on, click to toggle on/off)
+    connTypeBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            btn.classList.toggle('is-on');
+        });
+    });
+
+    // Playground Audio Waveform Dock elements
+    const waveformDock = root.querySelector('.js-playground-waveform-dock');
+    const waveformContainer = root.querySelector('.js-playground-waveform');
+
+    const BAR_COUNT = 25;
+    const waveBars = [];
+    if (waveformContainer) {
+        waveformContainer.innerHTML = '';
+        for (let i = 0; i < BAR_COUNT; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'wave-bar';
+            waveformContainer.appendChild(bar);
+            waveBars.push(bar);
+        }
+    }
+
+    // Dynamic Waveform Animation Loop
+    let waveTime = 0;
+    function animateWaveform() {
+        waveTime += 0.055;
+        const state = OwlmicStore.getState();
+        const isMicLive = state.mic && state.connection === 'connected';
+
+        if (isMicLive && waveBars.length > 0) {
+            const isDocked = waveformDock && waveformDock.classList.contains('is-docked');
+            // Min height equals width so quiescent capsules are circles; maxHeight reduced by 50% (74px center, 19px docked)
+            const minHeight = isDocked ? 3.5 : 5;
+            const maxHeight = isDocked ? 19 : 74;
+            const audioLevel = state.audioLevel || 0.06;
+            const centerIdx = (BAR_COUNT - 1) / 2;
+
+            for (let i = 0; i < BAR_COUNT; i++) {
+                const distFromCenter = Math.abs(i - centerIdx) / centerIdx; // 0 to 1
+                const envelope = Math.max(0.2, Math.cos(distFromCenter * Math.PI * 0.46));
+
+                const wave1 = Math.sin(waveTime * 5.2 + i * 0.52);
+                const wave2 = Math.sin(waveTime * 9.1 + i * 1.1) * 0.5;
+                const wave3 = Math.cos(waveTime * 14.0 + i * 0.28) * 0.25;
+                const dynamicMotion = (wave1 + wave2 + wave3) / 1.75;
+
+                const speechBoost = Math.max(0, audioLevel * 2.2);
+                const heightFraction = Math.max(0.08, (speechBoost * 0.95 + (dynamicMotion + 1) * 0.14 * (0.2 + speechBoost))) * envelope;
+                const barHeight = minHeight + (maxHeight - minHeight) * Math.min(1.0, heightFraction);
+
+                waveBars[i].style.height = `${barHeight.toFixed(1)}px`;
+            }
+        }
+
+        requestAnimationFrame(animateWaveform);
+    }
+    requestAnimationFrame(animateWaveform);
+
     // State subscriber
     OwlmicStore.subscribe((state) => {
+        const isCameraLive = state.camera;
+        const isMicLive = state.mic;
+
         // Camera button & preview
         if (cameraTile) {
-            if (state.camera && (state.connection === 'connected' || state.connection === 'repair')) {
+            if (isCameraLive) {
                 cameraTile.classList.add('is-on');
                 if (cameraCanvas) cameraCanvas.style.display = 'block';
                 if (cameraOverlay) cameraOverlay.style.display = 'flex';
                 if (cameraOffFace) cameraOffFace.style.display = 'none';
-                if (playgroundWatermark) playgroundWatermark.style.display = 'none';
                 if (cameraCaption) cameraCaption.textContent = `${state.cameraQuality} · ${state.cameraFps} fps`;
             } else {
                 cameraTile.classList.remove('is-on');
                 if (cameraCanvas) cameraCanvas.style.display = 'none';
                 if (cameraOverlay) cameraOverlay.style.display = 'none';
                 if (cameraOffFace) cameraOffFace.style.display = 'flex';
-                if (playgroundWatermark) playgroundWatermark.style.display = 'flex';
+            }
+        }
+
+        // Owl Watermark visibility:
+        // "whem mic ison the wol in teh pa lygroudn removes"
+        // Hidden when either Mic is ON or Camera is ON
+        if (playgroundWatermark) {
+            playgroundWatermark.style.display = (isMicLive || isCameraLive) ? 'none' : 'flex';
+        }
+
+        // Waveform Dock positioning & background rectangle:
+        // When mic is ON and camera is OFF -> centered without bg capsule
+        // When both are ON -> moves smoothly to bottom center inside 12px bento rectangle
+        // Appears instantly on toggle without entrance animation or rotation lag
+        if (waveformDock) {
+            if (isMicLive) {
+                const wasActive = waveformDock.classList.contains('is-active');
+                const wasDocked = waveformDock.classList.contains('is-docked');
+                const targetDocked = isCameraLive;
+
+                // Only animate position when dock was ALREADY active and is switching places
+                if (wasActive && wasDocked !== targetDocked) {
+                    waveformDock.classList.add('is-animating');
+                } else {
+                    waveformDock.classList.remove('is-animating');
+                }
+
+                waveformDock.classList.add('is-active');
+                if (targetDocked) {
+                    waveformDock.classList.remove('is-centered');
+                    waveformDock.classList.add('is-docked');
+                } else {
+                    waveformDock.classList.remove('is-docked');
+                    waveformDock.classList.add('is-centered');
+                }
+            } else {
+                waveformDock.classList.remove('is-animating', 'is-active', 'is-centered', 'is-docked');
             }
         }
 
         // Mic button
         if (micTile) {
-            if (state.mic && state.connection === 'connected') {
+            if (state.mic) {
                 micTile.classList.add('is-on');
             } else {
                 micTile.classList.remove('is-on');
@@ -298,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Speaker button
         if (speakerTile) {
-            if (state.speaker && state.connection === 'connected') {
+            if (state.speaker) {
                 speakerTile.classList.add('is-on');
             } else {
                 speakerTile.classList.remove('is-on');
@@ -311,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (statusPc) statusPc.textContent = state.pcName;
+        if (drawerPcName) drawerPcName.textContent = state.pcName;
         if (statusText) statusText.textContent = state.connection === 'connected' ? 'Connected' : state.connection;
 
         // Notification card content updates
