@@ -1,15 +1,22 @@
-/* Owlmic PC Win32 Flyout Panel Styles
-   Conforms to pc/crates/owlmic-ui/src/layout.rs, view.rs, panel.rs, and design/tokens.json
-   Fixed 560 x 255 px with 12px corner radius and 1px hairlines */
+/* Owlmic PC Win32 Flyout Panel Styles - Compact Bento 6-Square Layout (60% Scale)
+   Conforms to 1 Big Playground on top + 5 Square Bento Buttons in a single line below
+   100% style matching to mobile phone:
+   - Identical #7e7e7e bento hairline background with 1px padding & 1px gap
+   - Identical 12px tile corner roundness
+   - Identical OLED pure black (#000000) tile surfaces
+   - Identical high-contrast active state inversion (White background, Black icon)
+   - 60% compact desktop companion sizing (340px x 268px) */
 
 .pc-panel-wrapper {
-    width: 560px;
-    height: 255px;
-    background-color: var(--color-hairline); /* 1px hairline background */
-    border-radius: var(--radius-panel);
+    width: 100%;
+    height: 100%;
+    background-color: #7e7e7e; /* exact bento hairline grid background matching mobile */
+    border-radius: 0;
+    padding: 0;
     overflow: hidden;
     position: relative;
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
+    box-sizing: border-box;
 }
 
 /* Screens container */
@@ -17,47 +24,59 @@
     position: absolute;
     inset: 0;
     display: none;
-    background-color: var(--color-hairline);
+    background-color: #7e7e7e;
+    border-radius: 0;
+    overflow: hidden;
 }
 
 .pc-screen.active {
     display: block;
 }
 
-/* --- MAIN SCREEN --- */
-.pc-grid-main {
-    width: 560px;
-    height: 255px;
-    position: relative;
+/* --- MAIN SCREEN (BENTO 6 SQUARES) --- */
+.pc-grid-bento {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 1px;
+    background-color: #7e7e7e; /* exact hairline color matching mobile */
+    box-sizing: border-box;
 }
 
-/* Top Area: Camera Tile (352 x 198) */
-.pc-camera-tile {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 352px;
-    height: 198px;
-    background-color: var(--color-tile);
+/* 1. PLAYGROUND (Top Bento Box - Square 1:1) */
+.pc-playground-tile {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    flex: 0 0 auto;
+    background-color: #000000;
+    border-radius: 12px; /* exact roundness matching mobile playground */
+    position: relative;
     overflow: hidden;
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: default;
+    box-sizing: border-box;
 }
 
-.pc-camera-tile::before {
+/* 18px Dot Matrix matching mobile playground */
+.pc-playground-tile::before {
     content: '';
     position: absolute;
     inset: 0;
-    background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
-    background-size: 16px 16px;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+    background-size: 18px 18px;
     background-position: center center;
+    -webkit-mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 0.5) 55%, transparent 85%);
+    mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 0.5) 55%, transparent 85%);
     pointer-events: none;
     z-index: 0;
 }
 
-.pc-camera-watermark {
+/* Centered Owl Watermark (5% opacity) */
+.pc-playground-watermark {
     position: absolute;
     inset: 0;
     display: flex;
@@ -67,514 +86,567 @@
     z-index: 1;
 }
 
-.pc-camera-watermark svg {
-    width: 130px;
-    height: 130px;
-    color: #FFFFFF;
-    opacity: 0.04;
+.pc-playground-watermark svg {
+    width: 156px;
+    height: 156px;
+    color: #E6E6E6;
+    opacity: 0.05;
     user-select: none;
 }
 
+/* Live Video Preview Canvas */
 .pc-camera-canvas {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    display: block;
-    position: relative;
+    display: none;
+    position: absolute;
+    inset: 0;
     z-index: 2;
+    background: transparent;
+    transition: transform 0.3s ease;
+    border-radius: 12px;
 }
 
+.pc-playground-tile.is-mirror .pc-camera-canvas {
+    transform: scaleX(-1);
+}
+
+
+
+/* Centered Camera Off Face */
 .pc-camera-off-face {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    color: var(--color-text2);
+    gap: 6px;
+    color: #E6E6E6;
     position: relative;
     z-index: 2;
 }
 
 .pc-cam-glyph {
+    color: #E6E6E6 !important;
+    stroke: #E6E6E6 !important;
     opacity: 0.35;
+    width: 24px;
+    height: 24px;
     transition: opacity 0.2s ease, transform 0.2s ease;
 }
-
 
 .pc-camera-off-text {
-    font-size: 13px;
-    line-height: 17px;
-    color: var(--color-text2);
+    display: none !important; /* Removed text on playground per design requirement */
 }
 
-/* Repair notification bar inside camera tile */
-.pc-repair-bar {
+/* Playground Audio Waveform Dock (Exact Match to Mobile Playground!) */
+.pc-waveform-dock {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 352px;
-    height: 64px;
-    background-color: var(--color-tile);
-    border-bottom: 1px solid var(--color-hairline);
-    display: flex;
+    display: none;
     align-items: center;
-    padding: 0 12px;
-    gap: 10px;
+    justify-content: center;
+    left: 50%;
+    top: 50%;
     z-index: 10;
+    pointer-events: none;
+    transform-origin: center center;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    background-color: transparent;
+    border-radius: 10px;
+    padding: 0;
+    box-shadow: none;
+    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                padding 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                border-radius 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.pc-repair-text {
-    flex: 1;
-    font-size: 13px;
-    line-height: 17px;
-    color: var(--color-text);
+.pc-waveform-dock.is-active {
+    display: flex !important;
 }
 
-.pc-repair-btn {
-    width: 80px;
-    height: 32px;
-    background-color: var(--color-on);
-    color: var(--color-on-content);
-    border: none;
-    border-radius: 4px;
-    font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
+/* 1. Center Mode (Mic ON, Camera OFF) - Big clean vertical lines placed just a bit above center */
+.pc-waveform-dock.is-centered {
+    transform: translate(-50%, calc(-50% - 16px));
+    background-color: transparent;
+    border-color: transparent;
+    border-radius: 10px;
+    padding: 0;
+    box-shadow: none;
+}
+
+/* 2. Docked Mode (Camera ON & Mic ON) - Black RECTANGLE placed with breathing room above bottom */
+.pc-waveform-dock.is-docked {
+    transform: translate(-50%, calc(50% + 76px));
+    background-color: #000000;
+    border-color: rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    padding: 6px 14px;
+    box-shadow: none;
+}
+
+.pc-waveform {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
+    height: 70px;
+    transition: height 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                gap 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.pc-repair-btn:active {
-    opacity: 0.8;
+.pc-waveform-dock.is-docked .pc-waveform {
+    gap: 3px;
+    height: 22px;
 }
 
-/* Mic Tile (103 x 98 at 353, 0) */
-.pc-mic-tile {
-    position: absolute;
-    top: 0;
-    left: 353px;
-    width: 103px;
-    height: 98px;
-    background-color: var(--color-tile);
-    padding: 12px 10px 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    box-sizing: border-box;
-    transition: background-color var(--motion-state);
+.pc-waveform .wave-bar {
+    width: 4px;
+    min-height: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background-color: #E6E6E6;
+    transition: height 0.04s ease, width 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: center center;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.22);
 }
 
-/* Speaker Tile (103 x 98 at 457, 0) */
-.pc-speaker-tile {
-    position: absolute;
-    top: 0;
-    left: 457px;
-    width: 103px;
-    height: 98px;
-    background-color: var(--color-tile);
-    padding: 12px 10px 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    box-sizing: border-box;
-    transition: background-color var(--motion-state);
+.pc-waveform-dock.is-docked .wave-bar {
+    width: 3px;
+    min-height: 3px;
+    height: 3px;
+    box-shadow: none;
 }
 
 
-.pc-tile-icon-wrap {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
 
-.pc-tile-icon-wrap .pc-icon {
-    width: 30px;
-    height: 30px;
-    color: #FFFFFF !important;
-    stroke: #FFFFFF !important;
-    transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.pc-mic-tile .icon-off,
-.pc-speaker-tile .icon-off {
-    display: block !important;
-    opacity: 0.32;
-}
-
-.pc-mic-tile .icon-on,
-.pc-speaker-tile .icon-on {
-    display: none !important;
-    opacity: 1 !important;
-}
-
-
-/* Active State (is-on) */
-.pc-mic-tile.is-on .icon-off,
-.pc-speaker-tile.is-on .icon-off {
-    display: none !important;
-}
-
-.pc-mic-tile.is-on .icon-on,
-.pc-speaker-tile.is-on .icon-on {
-    display: block !important;
-    opacity: 1 !important;
-}
-
-.pc-tile-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+/* --- 2. FIVE SQUARES IN A SINGLE LINE (Bottom Bento Row) --- */
+.pc-bottom-bar {
     width: 100%;
-    padding: 0 4px;
+    height: 61px; /* Matches 61.2px width for 1:1 squares at 312px width */
+    display: flex;
+    gap: 1px;
+    background: transparent;
+    flex-shrink: 0;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
 }
 
-.pc-tile-label {
+.pc-square-btn {
+    flex: 1 1 0;
+    width: calc((100% - 4px) / 5);
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    background-color: #000000;
+    border: none !important;
+    border-radius: 12px; /* exact roundness matching mobile square buttons */
+    color: #E6E6E6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+    outline: none;
+    transition: none !important;
+}
+
+.pc-square-btn svg {
+    width: 22px;
+    height: 22px;
+    color: #E6E6E6 !important;
+    stroke: #E6E6E6 !important;
+    opacity: 1 !important; /* Never dimmed */
+    transition: none !important;
+    pointer-events: none;
+}
+
+.pc-square-btn:hover {
+    background-color: #0d0e12;
+}
+
+.pc-square-btn:hover svg {
+    opacity: 1 !important;
+}
+
+.pc-square-btn:active {
+    background-color: #141418;
+    transform: none !important;
+}
+
+/* Media buttons (Cam, Mic, Spk) active state */
+.pc-square-btn:not(.js-pc-btn-help):not(.js-pc-btn-wifi).is-on {
+    background-color: #000000 !important;
+    color: #E6E6E6 !important;
+}
+
+.pc-square-btn:not(.js-pc-btn-help):not(.js-pc-btn-wifi).is-on svg {
+    color: #E6E6E6 !important;
+    stroke: #E6E6E6 !important;
+    opacity: 1 !important;
+}
+
+/* Wi-Fi & Help Buttons (Match Mobile Top Bar): Never dimmed (opacity 1 always), only bg white or black */
+.pc-square-btn.js-pc-btn-help,
+.pc-square-btn.js-pc-btn-wifi {
+    background-color: #000000;
+    transition: background-color var(--motion-state) ease, color var(--motion-state) ease !important;
+}
+
+.pc-square-btn.js-pc-btn-help svg,
+.pc-square-btn.js-pc-btn-wifi svg {
+    color: #E6E6E6 !important;
+    stroke: #E6E6E6 !important;
+    opacity: 1 !important; /* Never dimmed */
+    transition: color var(--motion-state) ease, stroke var(--motion-state) ease !important;
+}
+
+.pc-square-btn.js-pc-btn-help:hover,
+.pc-square-btn.js-pc-btn-wifi:hover {
+    background-color: #1a1a1a;
+}
+
+.pc-square-btn.js-pc-btn-help.is-on,
+.pc-square-btn.js-pc-btn-wifi.is-on {
+    background-color: #E6E6E6 !important;
+    color: #000000 !important;
+}
+
+.pc-square-btn.js-pc-btn-help.is-on svg,
+.pc-square-btn.js-pc-btn-wifi.is-on svg {
+    color: #000000 !important;
+    stroke: #000000 !important;
+    opacity: 1 !important;
+}
+
+/* Icon on/off display toggles */
+.pc-square-btn .icon-off {
+    display: block !important;
+}
+
+.pc-square-btn .icon-on {
+    display: none !important;
+}
+
+.pc-square-btn.is-on .icon-off {
+    display: none !important;
+}
+
+.pc-square-btn.is-on .icon-on {
+    display: block !important;
+}
+
+/* --- PC MINIMAL PLAYGROUND DRAWER (End-to-End Lines, Zero Container Islands) --- */
+.pc-playground-drawer {
+    border-radius: 12px;
+    background-color: #000000;
+}
+
+.pc-playground-drawer .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    height: 42px;
+    border-bottom: 1px solid #1c1c1e;
+    flex-shrink: 0;
+    background-color: #000000;
+    box-sizing: border-box;
+}
+
+.pc-playground-drawer .drawer-back-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #FFFFFF;
+    cursor: pointer;
+    padding: 0;
+    transition: background-color 0.15s ease;
+}
+
+.pc-playground-drawer .drawer-back-btn:hover {
+    background-color: #1a1a1a;
+}
+
+.pc-playground-drawer .drawer-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
+}
+
+.pc-drawer-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background-color: #000000;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+.pc-drawer-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    border-bottom: 1px solid #1c1c1e;
+    box-sizing: border-box;
+    background: transparent;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.pc-drawer-row:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.pc-drawer-row.is-active {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.pc-drawer-row-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pc-drawer-device-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
+}
+
+.pc-drawer-device-meta {
+    font-size: 11px;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+}
+
+.pc-drawer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.04em;
-    color: var(--color-text2);
-    transition: color 0.15s ease;
 }
 
-.pc-tile-sub {
+.pc-drawer-badge.is-live {
+    color: #30D158;
+}
+
+.pc-drawer-badge .pc-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #30D158;
+    box-shadow: 0 0 6px rgba(48, 209, 88, 0.6);
+}
+
+.pc-drawer-tag {
     font-size: 10px;
-    color: var(--color-disabled);
-    font-family: var(--font-mono);
-    transition: color 0.15s ease;
+    font-weight: 600;
+    color: #8E8E93;
+    background-color: #141416;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
 }
 
-.pc-mic-tile.is-on .pc-tile-label,
-.pc-speaker-tile.is-on .pc-tile-label {
-    color: #FFFFFF;
-}
-
-.pc-mic-tile.is-on .pc-tile-sub,
-.pc-speaker-tile.is-on .pc-tile-sub {
-    color: var(--color-green);
-}
-
-/* Live dynamic mic audio level bar */
-.pc-mic-meter-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    height: 2px;
-    background-color: var(--color-green);
-    width: 0%;
-    transition: width 0.08s linear;
-}
-
-/* Phone Tile (207 x 99 at 353, 99) */
-.pc-phone-tile {
-    position: absolute;
-    top: 99px;
-    left: 353px;
-    width: 207px;
-    height: 99px;
-    background-color: var(--color-tile);
-    padding: 14px 16px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
+.pc-drawer-links-bar {
+    padding: 8px 12px;
+    border-top: 1px solid #1c1c1e;
+    background-color: #000000;
+    flex-shrink: 0;
     box-sizing: border-box;
-    transition: background-color var(--motion-state);
 }
 
+.pc-drawer-links-bar .drawer-conn-types {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+}
 
-.pc-phone-icon-col {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    background-color: #121318;
-    border: 1px solid #23252e;
+.pc-drawer-links-bar .conn-type-btn {
+    height: 32px;
+    border-radius: 7px;
+    background-color: #111114;
+    border: 1px solid #222225;
+    color: #8E8E93;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.pc-drawer-links-bar .conn-type-btn:hover {
+    background-color: #1a1a1f;
+    border-color: #333338;
     color: #FFFFFF;
+}
+
+.pc-drawer-links-bar .conn-type-btn.is-on {
+    background-color: #151518 !important;
+    border-color: #3e3e44 !important;
+    color: #FFFFFF !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn.is-on svg {
+    stroke: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn.is-on:hover {
+    background-color: #1c1c21 !important;
+    border-color: #55555c !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn:not(.is-on) {
+    background-color: #000000 !important;
+    border-color: #1a1a1d !important;
+    color: #3A3A3C !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn:not(.is-on) svg {
+    stroke: #3A3A3C !important;
+    opacity: 0.45 !important;
+}
+
+/* PC Process Showcase Rows */
+.pc-drawer-process-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1c1c1e;
+    box-sizing: border-box;
+    background: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.pc-drawer-process-row:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.pc-drawer-step-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.04em;
     flex-shrink: 0;
 }
 
-.pc-phone-icon-col svg {
-    color: #FFFFFF;
-    stroke: #FFFFFF;
-}
-
-.pc-phone-info-col {
+.pc-drawer-step-info {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    overflow: hidden;
+    gap: 1px;
+    min-width: 0;
 }
 
-.pc-phone-name {
-    font-size: 14px;
-    line-height: 18px;
+.pc-drawer-step-name {
+    font-size: 12px;
     font-weight: 600;
-    color: var(--color-text);
+    color: #FFFFFF;
+}
+
+.pc-drawer-step-detail {
+    font-size: 10px;
+    color: #8E8E93;
+    line-height: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.pc-status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+.pc-drawer-step-arrow {
+    font-size: 12px;
+    color: #8E8E93;
+    text-decoration: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
 }
 
-.pc-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background-color: var(--color-green);
+.pc-drawer-step-arrow:hover {
+    color: #FFFFFF;
+    background-color: #1a1a1e;
+}
+
+.pc-drawer-step-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #8E8E93;
+    background-color: #141416;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
     flex-shrink: 0;
 }
 
-.pc-phone-state {
+.pc-drawer-step-tag.is-live {
+    color: #30D158;
+    background-color: rgba(48, 209, 88, 0.1);
+}
+
+.pc-drawer-row-label {
     font-size: 12px;
-    line-height: 16px;
-    color: var(--color-text2);
-    white-space: nowrap;
+    font-weight: 600;
+    color: #FFFFFF;
 }
 
-/* Bottom Row: 5 icon-heavy action tiles at y = 199 (Height 56px) */
-.pc-bottom-btn {
-    position: absolute;
-    top: 199px;
-    height: 56px;
-    background-color: var(--color-tile);
-    border: none;
-    outline: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    cursor: pointer;
-    font-family: var(--font-sans);
-    color: var(--color-text2);
-    box-sizing: border-box;
-    padding: 6px 4px;
-    transition: background-color var(--motion-state), color var(--motion-state);
-}
-
-.pc-bottom-btn svg {
-    color: var(--color-text2);
-    stroke: var(--color-text2);
-    transition: color 0.15s ease, stroke 0.15s ease, transform 0.15s ease;
-}
-
-.pc-btn-label {
+.pc-drawer-row-val {
     font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.02em;
-    line-height: 14px;
-    color: var(--color-text2);
-    transition: color 0.15s ease;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
 }
 
-
-.pc-bottom-btn:active {
-    background-color: #1a1b20;
+.pc-drawer-link-row {
+    cursor: pointer;
 }
 
-.pc-btn-framing {
-    left: 0;
-    width: 111px;
+.pc-drawer-arrow {
+    font-size: 12px;
+    color: #8E8E93;
+    transition: transform 0.15s ease, color 0.15s ease;
 }
 
-.pc-btn-mirror {
-    left: 112px;
-    width: 111px;
-}
-
-/* Active Mirror State */
-.pc-btn-mirror.active {
-    background-color: #161820;
+.pc-drawer-link-row:hover .pc-drawer-arrow {
     color: #FFFFFF;
+    transform: translateX(2px);
 }
 
-.pc-btn-mirror.active svg {
-    color: #FFFFFF;
-    stroke: #FFFFFF;
+.pc-drawer-row-version {
+    margin-top: auto;
+    border-bottom: none;
+    padding: 8px 14px;
 }
 
-.pc-btn-mirror.active .pc-btn-label {
-    color: #FFFFFF;
-}
-
-.pc-btn-lens {
-    left: 224px;
-    width: 111px;
-}
-
-.pc-btn-settings {
-    left: 336px;
-    width: 111px;
-}
-
-.pc-btn-indicator {
-    left: 448px;
-    width: 112px;
-    cursor: pointer;
-}
-
-/* --- APPROVE GATE SCREEN --- */
-.pc-gate-top {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 560px;
-    height: 198px;
-    background-color: var(--color-tile);
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-}
-
-.pc-gate-title {
-    font-size: 14px;
-    line-height: 18px;
-    font-weight: 600;
-    color: var(--color-text);
-}
-
-.pc-gate-subtitle {
-    font-size: 13px;
-    line-height: 17px;
-    color: var(--color-text2);
-    margin-top: 2px;
-}
-
-.pc-gate-code {
-    margin-top: 20px;
-    font-family: var(--font-mono);
-    font-size: 32px;
-    font-weight: 600;
-    color: var(--color-text);
-    text-align: center;
-    letter-spacing: 0.15em;
-}
-
-.pc-gate-allow {
-    position: absolute;
-    top: 199px;
-    left: 0;
-    width: 279px;
-    height: 56px;
-    background-color: var(--color-on);
-    color: var(--color-on-content);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.pc-gate-allow:active {
-    opacity: 0.85;
-}
-
-.pc-gate-deny {
-    position: absolute;
-    top: 199px;
-    left: 280px;
-    width: 280px;
-    height: 56px;
-    background-color: var(--color-tile);
-    color: var(--color-text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.pc-gate-deny:active {
-    background-color: #141416;
-}
-
-/* --- PC SETTINGS SCREEN --- */
-.pc-settings-header {
-    height: 40px;
-    background-color: var(--color-tile);
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    gap: 8px;
-    cursor: pointer;
-}
-
-
-.pc-settings-back-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--color-text);
-}
-
-.pc-settings-scroll {
-    height: 214px;
-    overflow-y: auto;
-    background-color: var(--color-hairline);
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-}
-
-.pc-set-row {
-    height: 32px;
-    min-height: 32px;
-    background-color: var(--color-tile);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 12px;
-    font-size: 13px;
-    cursor: pointer;
-}
-
-
-.pc-set-header {
-    background-color: var(--color-bg);
-    cursor: default;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    color: var(--color-text2);
-    text-transform: uppercase;
-}
-
-.pc-set-label {
-    color: var(--color-text);
-}
-
-.pc-set-val {
-    color: var(--color-text2);
-}
-
-.pc-set-actions {
-    display: flex;
-    gap: 6px;
-}
-
-.pc-btn-action {
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-hairline);
-    color: var(--color-text);
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    cursor: pointer;
+.pc-drawer-dim {
+    font-size: 10px;
+    color: #555558;
+    font-family: var(--font-mono, monospace);
 }
 
 

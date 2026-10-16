@@ -47,7 +47,7 @@
 .mobile-phone-screen {
     width: 375px;
     height: 812px;
-    background-color: #FFFFFF;
+    background-color: #E6E6E6;
     border-radius: 38px;
     overflow: hidden;
     position: relative;
@@ -199,14 +199,14 @@
     font-size: 13.5px;
     font-weight: 600;
     letter-spacing: normal;
-    color: #FFFFFF !important;
+    color: #E6E6E6 !important;
 }
 
 .status-notif-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #FFFFFF !important;
+    color: #E6E6E6 !important;
     background: rgba(255, 255, 255, 0.14) !important;
     border-radius: 4px;
     padding: 2px;
@@ -215,7 +215,7 @@
 }
 
 .status-notif-badge svg {
-    color: #FFFFFF !important;
+    color: #E6E6E6 !important;
 }
 
 .status-bar-right {
@@ -237,7 +237,7 @@
 
 .signal-bar {
     width: 2.5px;
-    background-color: #FFFFFF !important;
+    background-color: #E6E6E6 !important;
     border-radius: 0.5px;
 }
 
@@ -252,7 +252,7 @@
     font-size: 11px;
     font-weight: 600;
     letter-spacing: normal;
-    color: #FFFFFF !important;
+    color: #E6E6E6 !important;
 }
 
 /* Battery indicator */
@@ -276,7 +276,7 @@
 .battery-fill {
     width: 90%;
     height: 100%;
-    background-color: #FFFFFF !important;
+    background-color: #E6E6E6 !important;
     border-radius: 1.5px;
 }
 
@@ -348,14 +348,14 @@
     background: #000000;
     border: 1px solid #262626;
     border-radius: 4px;
-    color: #FFFFFF;
+    color: #E6E6E6;
 }
 
 .notif-app-name {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 12.5px;
     font-weight: 600;
-    color: #FFFFFF;
+    color: #E6E6E6;
     text-transform: none;
     letter-spacing: normal;
 }
@@ -394,7 +394,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 13.5px;
     font-weight: 600;
-    color: #FFFFFF;
+    color: #E6E6E6;
     letter-spacing: normal;
     text-transform: none;
 }
@@ -420,7 +420,7 @@
     flex: 1;
     background: #000000;
     border: 1px solid #333333;
-    color: #FFFFFF;
+    color: #E6E6E6;
     border-radius: 8px;
     padding: 7px 10px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -468,15 +468,11 @@
 }
 
 .phone-wordmark {
-    font-family: 'Monoska', monospace, var(--font-sans);
-    font-size: 26px;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-    color: #FFFFFF !important;
     display: inline-flex;
     align-items: center;
-    white-space: nowrap;
+    gap: 0;
     user-select: none;
+    line-height: 1;
 }
 
 /* In landscape: align at bottom and order letters so 'o' is at top and 'c' is at bottom */
@@ -490,29 +486,25 @@
     flex-direction: row-reverse;
 }
 
-/* Individual character styling in Monoska */
+/* Individual character vector glyph styling (converted from Monoska font) */
 .char {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 19px;
-    height: 100%;
-    color: #FFFFFF !important;
-    background: transparent;
+    display: inline-block;
+    width: 20px;
+    height: 23px;
+    color: #E6E6E6 !important;
+    fill: currentColor;
     transform: rotate(0deg);
     transition: none;
     transform-origin: center center;
     will-change: transform;
+    flex-shrink: 0;
 }
 
 /* In landscape: each character rotates 90deg to stay upright relative to the viewer */
 .device-mobile.is-landscape .char {
     transform: rotate(90deg);
-    width: 26px;
-}
-
-.device-mobile.is-landscape .char-dot {
-    width: 28px;
+    width: 24px;
+    height: 24px;
 }
 
 /* Top Bar Right Partitions: Rounded Bento Boxes for Help (?) and Wi-Fi */
@@ -535,8 +527,8 @@
 
 .top-help-tile svg,
 .top-wifi-tile svg {
-    color: #FFFFFF !important;
-    stroke: #FFFFFF !important;
+    color: #E6E6E6 !important;
+    stroke: #E6E6E6 !important;
     width: 28px;
     height: 28px;
     transition: color var(--motion-state), stroke var(--motion-state);
@@ -551,7 +543,7 @@
 /* Toggle ON State (exclusive for Hint ? and Wi-Fi): White background, Black icon */
 .top-help-tile.is-on,
 .top-wifi-tile.is-on {
-    background-color: #FFFFFF !important;
+    background-color: #E6E6E6 !important;
 }
 
 
@@ -603,7 +595,7 @@
 .playground-watermark svg {
     width: 220px;
     height: 220px;
-    color: #FFFFFF;
+    color: #E6E6E6;
     opacity: 0.05;
     pointer-events: none;
     user-select: none;
@@ -618,6 +610,109 @@
     position: absolute;
     inset: 0;
     z-index: 2;
+    background: transparent;
+}
+
+/* Playground Wavelength / Audio Waves Dock */
+.playground-waveform-dock {
+    position: absolute;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    left: 50%;
+    top: 50%;
+    z-index: 10;
+    pointer-events: none;
+    transform-origin: center center;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    background-color: transparent;
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: none;
+    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                padding 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                border-radius 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.playground-waveform-dock.is-active {
+    display: flex;
+}
+
+/* 1. Center Mode (Mic ON, Camera OFF) - Big, clean, minimal vertical lines in center without background capsule */
+.device-mobile.is-portrait .playground-waveform-dock.is-centered {
+    transform: translate(-50%, -50%) rotate(0deg);
+    background-color: transparent;
+    border-color: transparent;
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: none;
+}
+
+.device-mobile.is-landscape .playground-waveform-dock.is-centered {
+    transform: translate(-50%, -50%) rotate(90deg);
+    background-color: transparent;
+    border-color: transparent;
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: none;
+}
+
+/* 2. Docked Mode (Camera ON & Mic ON) - Black RECTANGLE with 12px roundness matching bento grid at BOTTOM CENTER */
+.device-mobile.is-portrait .playground-waveform-dock.is-docked {
+    transform: translate(-50%, calc(50% + 158px)) rotate(0deg);
+    background-color: #000000;
+    border-color: rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    padding: 8px 16px;
+    box-shadow: none;
+}
+
+.device-mobile.is-landscape .playground-waveform-dock.is-docked {
+    transform: translate(calc(-50% - 138px), -50%) rotate(90deg);
+    background-color: #000000;
+    border-color: rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    padding: 8px 16px;
+    box-shadow: none;
+}
+
+/* Audio waveform bars container */
+.playground-waveform {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 80px;
+    transition: height 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                gap 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.playground-waveform-dock.is-docked .playground-waveform {
+    gap: 4px;
+    height: 24px;
+}
+
+/* Every single vertical line has constant width & smooth scale transition */
+.wave-bar {
+    width: 5px;
+    min-height: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background-color: #E6E6E6;
+    transition: height 0.04s ease, width 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: center center;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
+}
+
+.playground-waveform-dock.is-docked .wave-bar {
+    width: 3.5px;
+    min-height: 3.5px;
+    height: 3.5px;
+    box-shadow: none;
 }
 
 /* 3. BOTTOM BAR: 3 Rounded Bento Boxes with 1px gap */
@@ -642,7 +737,7 @@
     background-color: #000000;
     border: none !important;
     border-radius: 12px;
-    color: #FFFFFF;
+    color: #E6E6E6;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -665,10 +760,11 @@
 .phone-square-btn svg {
     width: 28px;
     height: 28px;
-    color: #FFFFFF !important;
-    stroke: #FFFFFF !important;
-    opacity: 0.32;
-    transition: opacity var(--motion-state) ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #E6E6E6 !important;
+    stroke: #E6E6E6 !important;
+    opacity: 1 !important; /* Never dimmed */
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
 }
 
 
@@ -711,15 +807,15 @@
 .phone-square-partition.is-on,
 .phone-square-btn.is-on {
     background-color: #000000;
-    color: #FFFFFF;
+    color: #E6E6E6;
     border-color: transparent;
 }
 
 
 .phone-square-partition.is-on svg,
 .phone-square-btn.is-on svg {
-    stroke: #FFFFFF !important;
-    color: #FFFFFF !important;
+    stroke: #E6E6E6 !important;
+    color: #E6E6E6 !important;
     opacity: 1 !important;
 }
 
