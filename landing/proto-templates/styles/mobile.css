@@ -468,15 +468,11 @@
 }
 
 .phone-wordmark {
-    font-family: 'Monoska', monospace, var(--font-sans);
-    font-size: 26px;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-    color: #E6E6E6 !important;
     display: inline-flex;
     align-items: center;
-    white-space: nowrap;
+    gap: 0;
     user-select: none;
+    line-height: 1;
 }
 
 /* In landscape: align at bottom and order letters so 'o' is at top and 'c' is at bottom */
@@ -490,29 +486,25 @@
     flex-direction: row-reverse;
 }
 
-/* Individual character styling in Monoska */
+/* Individual character vector glyph styling (converted from Monoska font) */
 .char {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 19px;
-    height: 100%;
+    display: inline-block;
+    width: 20px;
+    height: 23px;
     color: #E6E6E6 !important;
-    background: transparent;
+    fill: currentColor;
     transform: rotate(0deg);
     transition: none;
     transform-origin: center center;
     will-change: transform;
+    flex-shrink: 0;
 }
 
 /* In landscape: each character rotates 90deg to stay upright relative to the viewer */
 .device-mobile.is-landscape .char {
     transform: rotate(90deg);
-    width: 26px;
-}
-
-.device-mobile.is-landscape .char-dot {
-    width: 28px;
+    width: 24px;
+    height: 24px;
 }
 
 /* Top Bar Right Partitions: Rounded Bento Boxes for Help (?) and Wi-Fi */
