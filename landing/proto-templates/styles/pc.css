@@ -343,4 +343,310 @@
     display: block !important;
 }
 
+/* --- PC MINIMAL PLAYGROUND DRAWER (End-to-End Lines, Zero Container Islands) --- */
+.pc-playground-drawer {
+    border-radius: 12px;
+    background-color: #000000;
+}
+
+.pc-playground-drawer .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    height: 42px;
+    border-bottom: 1px solid #1c1c1e;
+    flex-shrink: 0;
+    background-color: #000000;
+    box-sizing: border-box;
+}
+
+.pc-playground-drawer .drawer-back-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #FFFFFF;
+    cursor: pointer;
+    padding: 0;
+    transition: background-color 0.15s ease;
+}
+
+.pc-playground-drawer .drawer-back-btn:hover {
+    background-color: #1a1a1a;
+}
+
+.pc-playground-drawer .drawer-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
+}
+
+.pc-drawer-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background-color: #000000;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+.pc-drawer-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    border-bottom: 1px solid #1c1c1e;
+    box-sizing: border-box;
+    background: transparent;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.pc-drawer-row:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.pc-drawer-row.is-active {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.pc-drawer-row-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pc-drawer-device-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
+}
+
+.pc-drawer-device-meta {
+    font-size: 11px;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+}
+
+.pc-drawer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.pc-drawer-badge.is-live {
+    color: #30D158;
+}
+
+.pc-drawer-badge .pc-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #30D158;
+    box-shadow: 0 0 6px rgba(48, 209, 88, 0.6);
+}
+
+.pc-drawer-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #8E8E93;
+    background-color: #141416;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+
+.pc-drawer-links-bar {
+    padding: 8px 12px;
+    border-top: 1px solid #1c1c1e;
+    background-color: #000000;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.pc-drawer-links-bar .drawer-conn-types {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+}
+
+.pc-drawer-links-bar .conn-type-btn {
+    height: 32px;
+    border-radius: 7px;
+    background-color: #111114;
+    border: 1px solid #222225;
+    color: #8E8E93;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.pc-drawer-links-bar .conn-type-btn:hover {
+    background-color: #1a1a1f;
+    border-color: #333338;
+    color: #FFFFFF;
+}
+
+.pc-drawer-links-bar .conn-type-btn.is-on {
+    background-color: #151518 !important;
+    border-color: #3e3e44 !important;
+    color: #FFFFFF !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn.is-on svg {
+    stroke: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn.is-on:hover {
+    background-color: #1c1c21 !important;
+    border-color: #55555c !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn:not(.is-on) {
+    background-color: #000000 !important;
+    border-color: #1a1a1d !important;
+    color: #3A3A3C !important;
+}
+
+.pc-drawer-links-bar .conn-type-btn:not(.is-on) svg {
+    stroke: #3A3A3C !important;
+    opacity: 0.45 !important;
+}
+
+/* PC Process Showcase Rows */
+.pc-drawer-process-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1c1c1e;
+    box-sizing: border-box;
+    background: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.pc-drawer-process-row:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.pc-drawer-step-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.pc-drawer-step-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.pc-drawer-step-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #FFFFFF;
+}
+
+.pc-drawer-step-detail {
+    font-size: 10px;
+    color: #8E8E93;
+    line-height: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pc-drawer-step-arrow {
+    font-size: 12px;
+    color: #8E8E93;
+    text-decoration: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.pc-drawer-step-arrow:hover {
+    color: #FFFFFF;
+    background-color: #1a1a1e;
+}
+
+.pc-drawer-step-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #8E8E93;
+    background-color: #141416;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+}
+
+.pc-drawer-step-tag.is-live {
+    color: #30D158;
+    background-color: rgba(48, 209, 88, 0.1);
+}
+
+.pc-drawer-row-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #FFFFFF;
+}
+
+.pc-drawer-row-val {
+    font-size: 11px;
+    font-weight: 500;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+}
+
+.pc-drawer-link-row {
+    cursor: pointer;
+}
+
+.pc-drawer-arrow {
+    font-size: 12px;
+    color: #8E8E93;
+    transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.pc-drawer-link-row:hover .pc-drawer-arrow {
+    color: #FFFFFF;
+    transform: translateX(2px);
+}
+
+.pc-drawer-row-version {
+    margin-top: auto;
+    border-bottom: none;
+    padding: 8px 14px;
+}
+
+.pc-drawer-dim {
+    font-size: 10px;
+    color: #555558;
+    font-family: var(--font-mono, monospace);
+}
+
 

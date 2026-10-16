@@ -27,9 +27,9 @@
     /* Mid-gray canvas background */
     --color-canvas-bg: #35383f;
 
-    /* Typography */
-    --font-sans: 'Monoska', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'Monoska', Consolas, monospace;
+    /* Typography: Standard System Fonts (Only owlmic wordmark is vector SVG from Monoska) */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
     /* Radii */
     --radius-panel: 12px;
@@ -385,8 +385,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 14px;
-    height: 48px;
+    padding: 12px 16px;
+    height: 52px;
     border-bottom: 1px solid #1c1c1e;
     flex-shrink: 0;
     box-sizing: border-box;
@@ -394,8 +394,8 @@ body {
 }
 
 .drawer-back-btn {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -404,7 +404,7 @@ body {
     color: #FFFFFF;
     cursor: pointer;
     padding: 0;
-    border-radius: 6px;
+    border-radius: 8px;
     transition: background-color 0.15s ease;
     outline: none;
 }
@@ -418,13 +418,13 @@ body {
 }
 
 .drawer-back-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     stroke: #FFFFFF;
 }
 
 .drawer-title {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 600;
     color: #FFFFFF;
     letter-spacing: -0.01em;
@@ -435,60 +435,123 @@ body {
 .drawer-body {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 14px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     box-sizing: border-box;
 }
 
-.drawer-section-label {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #8E8E93;
-    margin-bottom: 2px;
-    user-select: none;
-}
-
-/* PC Card */
-.drawer-pc-card {
+/* --- SHARED MINIMAL DRAWER LIST (End-to-End Lines, Zero Container Islands) --- */
+.drawer-list {
+    flex: 1;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    background-color: #0c0d10;
-    border: 1px solid #222225;
-    border-radius: 10px;
-    padding: 10px 12px;
+    flex-direction: column;
+    overflow-y: auto;
+    background-color: #000000;
+    padding: 0;
+    margin: 0;
     box-sizing: border-box;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.drawer-pc-card.is-active {
-    background-color: #101115;
-    border-color: #303038;
-}
-
-.drawer-pc-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background-color: #17181c;
+.drawer-row {
+    width: 100%;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1c1c1e;
+    box-sizing: border-box;
+    background: transparent;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.drawer-row:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.drawer-row.is-active {
+    background-color: rgba(255, 255, 255, 0.015);
+}
+
+.drawer-row-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.drawer-device-name {
+    font-size: 14px;
+    font-weight: 700;
     color: #FFFFFF;
+    letter-spacing: -0.01em;
+}
+
+.drawer-device-meta {
+    font-size: 11px;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+}
+
+.drawer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.drawer-badge.is-live {
+    color: #30D158;
+}
+
+.drawer-badge .pc-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #30D158;
+    box-shadow: 0 0 6px rgba(48, 209, 88, 0.6);
+}
+
+.drawer-tag {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8E8E93;
+    background-color: #141416;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+
+/* Process Showcase Rows (Steps 01, 02, 03) */
+.drawer-process-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1c1c1e;
+    box-sizing: border-box;
+    background: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.drawer-process-row:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.drawer-step-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: #8E8E93;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.04em;
     flex-shrink: 0;
 }
 
-.drawer-pc-icon svg {
-    width: 18px;
-    height: 18px;
-    stroke: #FFFFFF;
-}
-
-.drawer-pc-info {
+.drawer-step-info {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -496,116 +559,116 @@ body {
     min-width: 0;
 }
 
-.drawer-pc-name {
+.drawer-step-name {
     font-size: 13px;
     font-weight: 600;
     color: #FFFFFF;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    letter-spacing: -0.01em;
 }
 
-.drawer-pc-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.drawer-pc-status-text {
+.drawer-step-detail {
     font-size: 11px;
     color: #8E8E93;
+    line-height: 14px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.drawer-pc-status-text.muted {
-    color: #636366;
-}
-
-.drawer-badge-active {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: #30D158;
-    background-color: rgba(48, 209, 88, 0.12);
-    border: 1px solid rgba(48, 209, 88, 0.3);
-    padding: 3px 7px;
+.drawer-step-arrow {
+    font-size: 13px;
+    color: #8E8E93;
+    text-decoration: none;
+    padding: 2px 6px;
     border-radius: 4px;
-    text-transform: uppercase;
-}
-
-.drawer-btn-ghost {
-    background: transparent;
-    border: 1px solid #3A3A3C;
-    border-radius: 6px;
-    color: #E6E6E6;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    cursor: pointer;
     transition: all 0.15s ease;
 }
 
-.drawer-btn-ghost:hover {
-    border-color: #FFFFFF;
+.drawer-step-arrow:hover {
     color: #FFFFFF;
+    background-color: #1a1a1e;
 }
 
-/* Info Cards for Help */
-.drawer-info-card {
-    background-color: #0c0d10;
-    border: 1px solid #1f2024;
-    border-radius: 9px;
-    padding: 10px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.drawer-step-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #8E8E93;
+    background-color: #141416;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
 }
 
-.drawer-info-title {
-    font-size: 12px;
+.drawer-step-tag.is-live {
+    color: #30D158;
+    background-color: rgba(48, 209, 88, 0.1);
+}
+
+.drawer-row-label {
+    font-size: 13px;
     font-weight: 600;
     color: #FFFFFF;
 }
 
-.drawer-info-text {
-    font-size: 11px;
-    line-height: 15px;
+.drawer-arrow {
+    font-size: 13px;
     color: #8E8E93;
+    transition: transform 0.15s ease, color 0.15s ease;
 }
 
-/* Footer Section for Connection Types */
-.drawer-footer {
-    padding: 10px 14px 12px 14px;
+.drawer-link-row {
+    cursor: pointer;
+}
+
+.drawer-link-row:hover .drawer-arrow {
+    color: #FFFFFF;
+    transform: translateX(2px);
+}
+
+.drawer-row-version {
+    margin-top: auto;
+    border-bottom: none;
+    padding: 10px 16px;
+}
+
+.drawer-dim {
+    font-size: 11px;
+    color: #555558;
+    font-family: var(--font-mono, monospace);
+}
+
+/* Footer Bar for Connection Types */
+.drawer-links-bar {
+    padding: 10px 16px 12px;
     border-top: 1px solid #1c1c1e;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 8px;
     flex-shrink: 0;
     box-sizing: border-box;
     background-color: #000000;
 }
 
 .drawer-footer-title {
-    font-size: 10px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: #8E8E93;
     user-select: none;
 }
 
 .drawer-conn-types {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
 }
 
 .conn-type-btn {
     flex: 1 1 0;
-    height: 38px;
-    border-radius: 8px;
+    height: 44px;
+    border-radius: 10px;
     border: 1px solid #222225;
     background-color: #0a0a0c;
     color: #55555c;
@@ -625,36 +688,43 @@ body {
     pointer-events: none;
 }
 
-/* Toggled ON state (high contrast white tile with black icon) */
+/* Toggled ON state (Dark sleek tile, crisp white icon, NO white background) */
 .conn-type-btn.is-on {
-    background-color: #FFFFFF !important;
-    border-color: #FFFFFF !important;
-    color: #000000 !important;
+    background-color: #151518 !important;
+    border-color: #3e3e44 !important;
+    color: #FFFFFF !important;
 }
 
 .conn-type-btn.is-on svg {
-    stroke: #000000 !important;
+    stroke: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+.conn-type-btn.is-on:hover {
+    background-color: #1c1c21 !important;
+    border-color: #55555c !important;
 }
 
 /* Toggled OFF state */
 .conn-type-btn:not(.is-on) {
-    background-color: #000000;
-    border-color: #222225;
-    color: #3A3A3C;
+    background-color: #000000 !important;
+    border-color: #1a1a1d !important;
+    color: #3A3A3C !important;
 }
 
 .conn-type-btn:not(.is-on) svg {
-    stroke: #3A3A3C;
-    opacity: 0.6;
+    stroke: #3A3A3C !important;
+    opacity: 0.45 !important;
 }
 
 .conn-type-btn:not(.is-on):hover {
-    border-color: #3A3A3C;
-    color: #8E8E93;
+    border-color: #2c2c30 !important;
+    color: #636366 !important;
 }
 
 .conn-type-btn:not(.is-on):hover svg {
-    stroke: #8E8E93;
-    opacity: 0.9;
+    stroke: #636366 !important;
+    opacity: 0.7 !important;
 }
+
 
