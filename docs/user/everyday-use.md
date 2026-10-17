@@ -15,31 +15,28 @@ Once paired, Owlmic operates transparently. This guide covers daily controls, sw
 ## 2. Phone Controls & Dashboard
 
 ```
-┌───────────────────────────────────────┐
-│ Owlmic                            ⚙  │
-│ 🟢 Connected via USB                 │
-├───────────────────────────────────────┤
-│                                       │
-│    ┌─────────────┐  ┌─────────────┐   │
-│    │    🎙️ Mic   │  │  📷 Camera  │   │
-│    │     OFF     │  │     OFF     │   │
-│    └─────────────┘  └─────────────┘   │
-│                                       │
-│    ┌──────────────────────────────┐   │
-│    │          🔊 Speaker          │   │
-│    │             OFF              │   │
-│    └──────────────────────────────┘   │
-│                                       │
-└───────────────────────────────────────┘
++------------------------+-----+-----+
+| OWLMIC                 |  ?  |  @  |   ? = Setup & Help, @ = link tile
++------------------------+-----+-----+
+|                                    |
+|            preview area            |
+|   (owl, camera, sound wave and     |
+|    status messages show here)      |
+|                                    |
++------------+-----------+-----------+
+|   camera   |    mic    |  speaker  |
++------------+-----------+-----------+
 ```
 
-- **Mic Tile**: Tap to turn the microphone ON or OFF.
-  - When ON, the tile highlights in high-contrast white.
-  - The live audio level meter at the bottom of the tile bounces to reflect your voice loudness.
-- **Camera Tile**: Tap to turn the camera ON or OFF.
-  - When ON, a small flip camera button appears to switch between **Back** and **Front** lenses.
-  - Displays resolution and framerate badge (e.g., `1080p · 30 fps`).
-- **Speaker Tile**: Tap to route your PC's audio output through your phone speaker or connected headphones.
+- **Camera, mic and speaker tiles**: tap to turn each one on or off. Long-press a tile for its settings.
+  - A short note under the icon says when it is paused, restarting, failed ("Didn't start. Tap to try again.") or needs a permission.
+- **Preview area**: shows the owl while everything is off.
+  - With the camera on: the live picture, the quality and frame rate (for example `1080p · 30 fps`) and a button to flip between the back and front lenses.
+  - With the mic on: a sound wave that follows your voice.
+  - While not connected: a short message, such as "Looking for your PC", or the 4-digit code to approve on your PC.
+- **Link tile** (top right): its icon shows the link in use (Wi-Fi, USB debugging, USB tethering or Bluetooth) and its colour the state: green connected, yellow looking or waiting, red when something needs you. Tap it to see your PCs and choose one, and to pick which links Owlmic may use.
+- **? tile**: the three setup steps, the privacy policy and the app version.
+- **Turning the phone sideways**: the tiles stay where they are and everything on them turns upright, including the drawers and settings, so the phone can stand sideways during a call.
 
 ---
 

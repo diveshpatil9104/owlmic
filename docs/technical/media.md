@@ -74,6 +74,8 @@ This document describes the capture, encoding, transmission, jitter compensation
 - **Target Rotation & Aspect Ratio**: Maps orientation (`landscape`, `portrait`, `auto`) to CameraX `targetRotation` and matching resolution bounds, preserving the natural sensor field of view without squash or stretch distortion.
 - **OpenGL Shaders**: Renders the preview and encoder frames using a dedicated GPU frame-buffer.
   - Handles rotation with 20° gravity orientation hysteresis so flipping the phone does not jitter the video.
+  - The on-screen preview pass turns the picture by the rotation each frame was made for and fits it to the screen, so the preview reads upright whichever way the phone is held; the encoder pass is unchanged.
+  - The camera counts as bound only once CameraX has bound it, so a config that arrives while a bind is pending binds again instead of being lost.
   - Applies user-selected framing: **Fill** (center-cropped to 16:9) or **Fit** (letterboxed with clean black bars).
   - Handles horizontal mirroring for front-facing lenses.
 - **Hardware Encoder**: Feeds GPU textures directly into Android's hardware `MediaCodec` H.264 encoder.

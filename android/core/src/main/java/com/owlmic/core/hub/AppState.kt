@@ -30,7 +30,14 @@ sealed interface Connection {
 
     data class Approving(val pc: String, val code: String, val link: LinkKind) : Connection
 
-    data class Connected(val pc: String, val link: LinkKind, val hotspot: Boolean = false, val weak: Boolean = false) : Connection
+    /** [address] is where the PC was reached ("192.168.1.15:7653", or its Bluetooth address), for the connection list. */
+    data class Connected(
+        val pc: String,
+        val link: LinkKind,
+        val hotspot: Boolean = false,
+        val weak: Boolean = false,
+        val address: String? = null,
+    ) : Connection
 
     /** The link dropped less than 30 s ago; the session is held (section 7.6). */
     data class Reconnecting(val pc: String, val link: LinkKind?) : Connection
