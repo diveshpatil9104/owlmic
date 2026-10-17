@@ -144,7 +144,8 @@ class CameraPipeline(
             preview?.targetRotation = targetRot
             return
         }
-        captured = next.plan
+        // Recorded only once bound: a config arriving before then must bind again, as this one will be stale.
+        captured = null
         val ready = ProcessCameraProvider.getInstance(context)
         ready.addListener({
             if (config !== next || lifecycle !== owner) return@addListener
@@ -177,6 +178,7 @@ class CameraPipeline(
             val bound = runCatching { build(next.plan.fps > 30).also { provider.bindToLifecycle(owner, camera, it) } }
                 .recoverCatching { build(false).also { provider.bindToLifecycle(owner, camera, it) } }
             preview = bound.getOrNull()
+            if (bound.isSuccess) captured = next.plan
             onHealth(if (bound.isSuccess) Health.Ok else Health.Failed("no usable camera"))
         }, Executor { main.post(it) })
     }
