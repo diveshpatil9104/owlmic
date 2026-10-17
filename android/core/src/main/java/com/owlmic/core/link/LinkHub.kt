@@ -468,7 +468,7 @@ class LinkHub(
         pace()
         lastPing = 0
         // Connected first: the App Hub answers Welcomed with STATE and STREAM_STARTs, which go out only while connected.
-        setConnection(Connection.Connected(w.pcName, s.link, s.hotspot))
+        setConnection(Connection.Connected(w.pcName, s.link, s.hotspot, address = addressOf(s)))
         emit(LinkEvent.Welcomed(w.pcId, w.pcName, s.link, w.settings, resumed))
         emit(LinkEvent.Choices(emptyList()))
         emit(LinkEvent.KnownChanged)
@@ -514,8 +514,13 @@ class LinkHub(
         s.monitor.heard()
         router.use(s.path)
         pace()
-        setConnection(Connection.Connected(pcName, s.link, s.hotspot))
+        setConnection(Connection.Connected(pcName, s.link, s.hotspot, address = addressOf(s)))
         emit(LinkEvent.Switched(s.link))
+    }
+
+    private fun addressOf(s: LinkSession): String? {
+        val c = s.candidate
+        return c.host?.hostAddress?.let { if (c.tcpPort > 0) "$it:${c.tcpPort}" else it } ?: c.btAddress
     }
 
     private fun hold(s: LinkSession) {

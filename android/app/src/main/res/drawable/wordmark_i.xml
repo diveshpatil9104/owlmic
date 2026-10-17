@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The letter "i" of the OWLMIC wordmark, from the Monoska glyphs in landing/proto-templates; tinted in code. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="23dp"
+    android:viewportWidth="610"
+    android:viewportHeight="700">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M547 619V684Q547 700 531 700H376Q360 700 360 684V638Q360 618 345.5 604.0Q331 590 311 590H298Q278 590 264.0 604.0Q250 618 250 638V684Q250 700 233 700H79Q63 700 63 684V619Q63 603 79 603H208Q228 603 242.0 589.0Q256 575 256 555V145Q256 125 242.0 111.0Q228 97 208 97H79Q63 97 63 80V16Q63 0 79 0H233Q250 0 250 16V62Q250 82 264.0 96.0Q278 110 298 110H311Q331 110 345.5 96.0Q360 82 360 62V16Q360 0 376 0H531Q547 0 547 16V80Q547 97 531 97H402Q382 97 367.5 111.0Q353 125 353 145V555Q353 575 367.5 589.0Q382 603 402 603H531Q547 603 547 619Z" />
+</vector>

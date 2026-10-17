@@ -7,11 +7,16 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.OrientationEventListener
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,6 +27,8 @@ import com.owlmic.core.permission.PermissionGate
 import com.owlmic.core.permission.PermissionGate.Decision
 import com.owlmic.hub.AppMsg
 import com.owlmic.ui.MainScreen
+import com.owlmic.ui.TURN_NONE
+import com.owlmic.ui.nextTurn
 import kotlinx.coroutines.launch
 
 /**
@@ -37,11 +44,24 @@ class MainActivity : ComponentActivity() {
     private var asking: String? = null
     private val request = registerForActivityResult(ActivityResultContracts.RequestPermission(), ::answered)
 
+    /** How the phone is held (see Turn.kt). The screen itself stays upright; only what is drawn on it turns. */
+    private val turn = mutableIntStateOf(TURN_NONE)
+    private val orientation by lazy {
+        object : OrientationEventListener(this) {
+            override fun onOrientationChanged(degrees: Int) {
+                val next = nextTurn(degrees, turn.intValue)
+                if (next == turn.intValue) return
+                turn.intValue = next
+                showStatusBar(next == TURN_NONE)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.BLACK), SystemBarStyle.dark(android.graphics.Color.BLACK))
         super.onCreate(savedInstanceState)
         asking = savedInstanceState?.getString(ASKING)
-        setContent { MainScreen(onFeature = ::tap, onTryBluetooth = ::tryBluetooth, onTethering = ::openTethering) }
+        setContent { MainScreen(turn.intValue, onFeature = ::tap, onTryBluetooth = ::tryBluetooth, onTethering = ::openTethering) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { Owlmic.state.collect(::askNotificationsOnceOn) }
         }
@@ -50,6 +70,23 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         OwlmicService.open(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        orientation.enable()
+    }
+
+    override fun onPause() {
+        orientation.disable()
+        super.onPause()
+    }
+
+    /** Sideways, the status bar goes, as in the prototype; a swipe from the edge still shows it for a moment. */
+    private fun showStatusBar(show: Boolean) {
+        val bars = WindowCompat.getInsetsController(window, window.decorView)
+        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (show) bars.show(WindowInsetsCompat.Type.statusBars()) else bars.hide(WindowInsetsCompat.Type.statusBars())
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

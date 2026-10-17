@@ -7,15 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
@@ -53,18 +50,25 @@ import com.owlmic.hub.AppMsg
 import com.owlmic.core.R as Copy
 
 /**
- * The settings sheet (section 31): every phone setting inline, one step from the main screen. Choices are segmented
- * rows, never dialogs. Changes go to the Settings Hub, which saves them and syncs them with the PC.
+ * The settings sheet (section 31): every phone setting inline. It opens by long-pressing a feature tile, at that
+ * feature's section ([startAt]); the main screen gives it the window's insets and turns it with the phone. Choices are segmented rows, never dialogs. Changes go to the Settings Hub, which saves
+ * them and syncs them with the PC.
  */
 @Composable
-fun SettingsSheet(state: AppState, startAt: String, onClose: () -> Unit) {
+fun SettingsSheet(state: AppState, startAt: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val scroll = rememberScrollState()
     var cameraAt by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(startAt, cameraAt) {
-        if (startAt == SECTION_CAMERA && cameraAt >= 0) scroll.scrollTo(cameraAt)
+    var speakerAt by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(startAt, cameraAt, speakerAt) {
+        val at = when (startAt) {
+            SECTION_CAMERA -> cameraAt
+            SECTION_SPEAKER -> speakerAt
+            else -> 0
+        }
+        if (at >= 0) scroll.scrollTo(at)
     }
     val line = hairline()
-    Column(Modifier.fillMaxSize().background(Theme.bg).windowInsetsPadding(WindowInsets.safeDrawing).background(Theme.hairline)) {
+    Column(modifier.background(Theme.hairline)) {
         Row(
             Modifier.fillMaxWidth().height(Tokens.Phone.HEADER_DP.dp).background(Theme.tile).padding(start = Theme.padding),
             verticalAlignment = Alignment.CenterVertically,
@@ -86,7 +90,7 @@ fun SettingsSheet(state: AppState, startAt: String, onClose: () -> Unit) {
                 Choice(state, "camera.frameRate", Copy.string.setting_camera_frame_rate)
                 Choice(state, "camera.orientation", Copy.string.setting_camera_orientation)
             }
-            Section(Copy.string.section_speaker) {
+            Section(Copy.string.section_speaker, Modifier.onGloballyPositioned { speakerAt = it.positionInParent().y.toInt() }) {
                 Note(stringResource(Copy.string.phone_speaker_help))
             }
             Section(Copy.string.section_connection) {

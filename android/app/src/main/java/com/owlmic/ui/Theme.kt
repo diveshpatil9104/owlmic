@@ -29,6 +29,21 @@ object Theme {
     val yellow = Color(Tokens.Color.YELLOW)
     val green = Color(Tokens.Color.GREEN)
 
+    // The main screen's bento grid (the prototype in landing/proto-templates).
+    val ink = Color(Tokens.Color.INK)
+    val seam = Color(Tokens.Color.GAP)
+    val pressed = Color(Tokens.Color.PRESSED)
+    val rule = Color(Tokens.Color.RULE)
+    val chip = Color(Tokens.Color.CHIP)
+    val faint = Color(Tokens.Color.FAINT)
+    val chipOn = Color(Tokens.Color.CHIP_ON)
+    val chipOnEdge = Color(Tokens.Color.CHIP_ON_EDGE)
+    val chipOffEdge = Color(Tokens.Color.CHIP_OFF_EDGE)
+    val stripEdge = Color.White.copy(alpha = Tokens.Phone.STRIP_EDGE_ALPHA)
+    val gap = Tokens.Phone.GAP_DP.dp
+    val radius = Tokens.Phone.TILE_RADIUS_DP.dp
+    val glyph = Tokens.Phone.GLYPH_DP.dp
+
     val padding = Tokens.Space.TILE_PADDING_PHONE_DP.dp
     val touch = Tokens.Space.TOUCH_TARGET_DP.dp
     val icon = Tokens.Icon.PHONE_DP.dp

@@ -45,6 +45,13 @@ class GlRenderer {
     /** Degrees the camera's buffer turns clockwise to be upright, from CameraX. */
     @Volatile var rotation = 0
 
+    /**
+     * How the phone is held for the picture being made: CameraX's target rotation, in degrees. The app's screen stays
+     * upright, so the preview turns the picture by this much to look upright to whoever holds the phone. The encoder
+     * never does: the PC gets the picture as it is made.
+     */
+    @Volatile var screenTurn = 0
+
     /** The encoder gets at most this many frames a second; the preview gets them all. */
     @Volatile var fps = 30
 
@@ -155,30 +162,32 @@ class GlRenderer {
             EGL14.eglSwapBuffers(display, encoder)
         }
         if (preview != EGL14.EGL_NO_SURFACE) {
-            // Exactly what is sent: the encoder's framing, fitted inside the preview with black around it.
+            // Exactly what is sent: the encoder's framing, fitted inside the preview with black around it, turned the
+            // way the phone is held.
             val ow = if (encoderWidth > 0) encoderWidth else upright.first
             val oh = if (encoderHeight > 0) encoderHeight else upright.second
-            val scale = minOf(previewWidth.toFloat() / ow, previewHeight.toFloat() / oh)
-            val w = (ow * scale).toInt()
-            val h = (oh * scale).toInt()
+            val turn = screenTurn
+            val (x, y, w, h) = fitPreview(ow, oh, previewWidth, previewHeight, turn)
             EGL14.eglMakeCurrent(display, preview, preview, context)
             GLES20.glViewport(0, 0, previewWidth, previewHeight)
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            draw(upright.first, upright.second, ow, oh, (previewWidth - w) / 2, (previewHeight - h) / 2, w, h)
+            draw(upright.first, upright.second, ow, oh, x, y, w, h, turn)
             if (!EGL14.eglSwapBuffers(display, preview)) setPreview(null, 0, 0)
         }
     }
 
-    /** Draws the upright camera picture (uw×uh) cropped to ow:oh into the viewport. */
-    private fun draw(uw: Int, uh: Int, ow: Int, oh: Int, x: Int, y: Int, w: Int, h: Int) {
+    /** Draws the upright camera picture (uw×uh) cropped to ow:oh into the viewport, turned [turn] degrees clockwise. */
+    private fun draw(uw: Int, uh: Int, ow: Int, oh: Int, x: Int, y: Int, w: Int, h: Int, turn: Int = 0) {
         GLES20.glViewport(x, y, w, h)
         val (cx, cy) = centerCrop(uw, uh, ow, oh)
-        // uv in the output → crop around the centre → turn back into the buffer's orientation → the texture's own transform.
+        // uv in the output → into the picture → crop around the centre → turn back into the buffer's orientation → the
+        // texture's own transform.
         Matrix.setIdentityM(uvMatrix, 0)
         Matrix.translateM(uvMatrix, 0, 0.5f, 0.5f, 0f)
         Matrix.rotateM(uvMatrix, 0, rotation.toFloat(), 0f, 0f, 1f)
         Matrix.scaleM(uvMatrix, 0, cx, cy, 1f)
+        if (turn != 0) Matrix.rotateM(uvMatrix, 0, turn.toFloat(), 0f, 0f, 1f)
         Matrix.translateM(uvMatrix, 0, -0.5f, -0.5f, 0f)
         Matrix.multiplyMM(scratch, 0, texMatrix, 0, uvMatrix, 0)
 
@@ -240,4 +249,16 @@ class GlRenderer {
                 position(0)
             }
     }
+}
+
+/**
+ * Where a picture of [ow]×[oh] goes in a preview of [pw]×[ph]: fitted with black around it, and on its side when [turn]
+ * is a quarter. Returns x, y, width and height.
+ */
+internal fun fitPreview(ow: Int, oh: Int, pw: Int, ph: Int, turn: Int): IntArray {
+    val (fw, fh) = if (turn % 180 != 0) oh to ow else ow to oh
+    val scale = minOf(pw.toFloat() / fw, ph.toFloat() / fh)
+    val w = (fw * scale).toInt()
+    val h = (fh * scale).toInt()
+    return intArrayOf((pw - w) / 2, (ph - h) / 2, w, h)
 }

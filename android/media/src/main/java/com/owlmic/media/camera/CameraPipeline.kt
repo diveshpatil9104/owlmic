@@ -157,6 +157,8 @@ class CameraPipeline(
                 .setResolutionStrategy(ResolutionStrategy(boundSize, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
                 .build()
             val glExecutor = Executor { r.handler.post(it) }
+            val camera = if (next.lens == Lens.FRONT) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+            val cameraInfo = runCatching { provider.getCameraInfo(camera) }.getOrNull()
             fun build(highFps: Boolean): Preview = Preview.Builder()
                 .setResolutionSelector(selector)
                 .setTargetRotation(targetRot)
@@ -165,11 +167,13 @@ class CameraPipeline(
                 .apply {
                     setSurfaceProvider(glExecutor) { request ->
                         val res = request.resolution
-                        request.setTransformationInfoListener(glExecutor) { info -> r.rotation = info.rotationDegrees }
+                        request.setTransformationInfoListener(glExecutor) { info ->
+                            r.rotation = info.rotationDegrees
+                            cameraInfo?.let { c -> pictureTurn(info.rotationDegrees) { c.getSensorRotationDegrees(it) } }?.let { r.screenTurn = it }
+                        }
                         request.provideSurface(r.cameraSurface(res.width, res.height), glExecutor) { }
                     }
                 }
-            val camera = if (next.lens == Lens.FRONT) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
             val bound = runCatching { build(next.plan.fps > 30).also { provider.bindToLifecycle(owner, camera, it) } }
                 .recoverCatching { build(false).also { provider.bindToLifecycle(owner, camera, it) } }
             preview = bound.getOrNull()
@@ -290,6 +294,14 @@ fun surfaceRotationFor(degrees: Int, current: Int): Int {
     val distance = minOf((degrees - center + 360) % 360, (center - degrees + 360) % 360)
     return if (distance > 65) candidate else current
 }
+
+/**
+ * How the phone was held for a frame, as a quarter turn in degrees: the Surface rotation whose buffer rotation
+ * ([rotationFor], CameraX's for that rotation) is the frame's [rotationDegrees]. Null if none is.
+ */
+fun pictureTurn(rotationDegrees: Int, rotationFor: (Int) -> Int): Int? =
+    listOf(Surface.ROTATION_0, Surface.ROTATION_90, Surface.ROTATION_180, Surface.ROTATION_270)
+        .firstOrNull { rotationFor(it) == rotationDegrees }?.let { it * 90 }
 
 /** The target rotation that matches the requested [orientation] given the physical [sensorRotation]. */
 fun targetRotationFor(orientation: Orientation, sensorRotation: Int): Int = when (orientation) {
