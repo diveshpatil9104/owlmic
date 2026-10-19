@@ -6,12 +6,13 @@ mod ring;
 mod tests;
 
 pub use constants::*;
+use controls::GATE_OFF;
 
-use crate::audio::dsp::AudioDsp;
+use crate::audio::dsp::{AudioDsp, Processing};
 use resample::{JitterStats, Playout};
 use ring::SampleRing;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use std::time::Instant;
 
 /// The mic's jitter buffer. The receive thread pushes and the output device's thread pops; each
@@ -20,8 +21,12 @@ pub struct JitterBuffer {
     ring: SampleRing,
     base_target_samples: AtomicUsize,
     adaptive_target_samples: AtomicUsize,
-    ns_enabled: AtomicBool,
+    /// The mic settings' processing (see controls.rs); read once per pushed packet.
+    denoise_pct: AtomicU32,
+    /// The gate's margin over the noise floor in dB, or `GATE_OFF`.
+    gate_margin_db: AtomicI32,
     agc_enabled: AtomicBool,
+    volume_db: AtomicI32,
     /// Receive side.
     dsp: Mutex<AudioDsp>,
     /// Receive side.
@@ -38,8 +43,10 @@ impl JitterBuffer {
             ring: SampleRing::new(),
             base_target_samples: AtomicUsize::new(base_target),
             adaptive_target_samples: AtomicUsize::new(base_target),
-            ns_enabled: AtomicBool::new(true),
+            denoise_pct: AtomicU32::new(Processing::default().denoise_pct),
+            gate_margin_db: AtomicI32::new(GATE_OFF),
             agc_enabled: AtomicBool::new(true),
+            volume_db: AtomicI32::new(0),
             dsp: Mutex::new(AudioDsp::new()),
             stats: Mutex::new(JitterStats::new()),
             playout: Mutex::new(Playout::new()),
@@ -87,11 +94,7 @@ impl JitterBuffer {
             return;
         }
         if let Ok(mut dsp) = self.dsp.lock() {
-            dsp.process(
-                samples,
-                self.ns_strength(),
-                self.agc_enabled.load(Ordering::Relaxed),
-            );
+            dsp.process(samples, self.processing());
         }
         self.ring.push(samples);
     }
@@ -111,11 +114,6 @@ impl JitterBuffer {
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.ring.len()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_agc_enabled(&self, enabled: bool) {
-        self.agc_enabled.store(enabled, Ordering::Relaxed);
     }
 }
 

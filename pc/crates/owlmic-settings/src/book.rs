@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn missing_settings_read_as_their_default() {
-        assert_eq!(value(&Book::new(), "camera.lens"), "back");
+        assert_eq!(value(&Book::new(), "camera.lens"), "front");
         assert_eq!(value(&Book::new(), "nothing"), "");
     }
 
@@ -145,7 +145,7 @@ mod tests {
         let snap = shared_snapshot(&Book::new());
         assert!(
             snap.iter()
-                .any(|c| c.id == "mic.noiseReduction" && c.value == "phone" && c.version == 0)
+                .any(|c| c.id == "mic.noiseReduction" && c.value == "5" && c.version == 0)
         );
         assert!(
             !snap

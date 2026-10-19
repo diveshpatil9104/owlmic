@@ -364,11 +364,26 @@ impl Row {
     }
 }
 
+/// A setting's value as the panel shows it: noise reduction's 0 is "Off", the volume is in dB.
+fn value_text(id: &str, value: &str) -> String {
+    match (id, value) {
+        ("mic.noiseReduction", "0") => m::VALUE_OFF.into(),
+        ("mic.volume", v) => {
+            let db = if v.starts_with('-') || v == "0" {
+                v.to_string()
+            } else {
+                format!("+{v}")
+            };
+            fill(m::VALUE_DB, &[("db", &db)])
+        }
+        _ => m::text(&format!("value.{value}")).unwrap_or(value).into(),
+    }
+}
+
 /// The PC settings (SYSTEM_DESIGN section 33.3).
 fn rows(s: &PanelState) -> Vec<Row> {
     let choice = |id: &'static str| {
-        let value = s.value(id);
-        let shown = m::text(&format!("value.{value}")).unwrap_or(value);
+        let shown = value_text(id, s.value(id));
         let mut row = Row::plain(
             m::text(&format!("setting.{id}")).unwrap_or(id),
             shown,
@@ -380,7 +395,8 @@ fn rows(s: &PanelState) -> Vec<Row> {
     let mut out = vec![
         Row::header(m::SECTION_MIC),
         choice("mic.noiseReduction"),
-        choice("mic.boost"),
+        choice("mic.volume"),
+        choice("mic.autoLevel"),
     ];
     out.extend([
         Row::header(m::SECTION_CAMERA),
@@ -458,7 +474,9 @@ mod tests {
             paired: true,
             settings: [
                 ("camera.framing", "fill"),
-                ("mic.boost", "plus6"),
+                ("mic.volume", "6"),
+                ("mic.noiseReduction", "0"),
+                ("mic.autoLevel", "on"),
                 ("general.startWithWindows", "on"),
             ]
             .into_iter()
@@ -534,11 +552,13 @@ mod tests {
             blocked: false,
         });
         let rows = s.rows();
-        let boost = rows
-            .iter()
-            .find(|r| r.label == m::SETTING_MIC_BOOST)
-            .unwrap();
-        assert_eq!(boost.value, m::VALUE_PLUS6);
+        let value_of = |label: &str| &rows.iter().find(|r| r.label == label).unwrap().value;
+        assert_eq!(value_of(m::SETTING_MIC_VOLUME), "+6 dB");
+        assert_eq!(value_of(m::SETTING_MIC_NOISE_REDUCTION), m::VALUE_OFF);
+        assert_eq!(value_of(m::SETTING_MIC_AUTO_LEVEL), m::VALUE_ON);
+        assert_eq!(value_text("mic.volume", "-9"), "-9 dB");
+        assert_eq!(value_text("mic.volume", "0"), "0 dB");
+        assert_eq!(value_text("mic.noiseReduction", "7"), "7");
         let phone = rows
             .iter()
             .position(|r| r.action == RowAction::Phone(0))
@@ -562,12 +582,12 @@ mod tests {
         assert_eq!(s.click(Target::Row(website, 0), &rows), None);
         s.paired = false;
         let rows = s.rows();
-        let boost = rows
+        let volume = rows
             .iter()
-            .position(|r| r.label == m::SETTING_MIC_BOOST)
+            .position(|r| r.label == m::SETTING_MIC_VOLUME)
             .unwrap();
         assert_eq!(
-            s.click(Target::Row(boost, 0), &rows),
+            s.click(Target::Row(volume, 0), &rows),
             None,
             "pairing settings need a phone"
         );

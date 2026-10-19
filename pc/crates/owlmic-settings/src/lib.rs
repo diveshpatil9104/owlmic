@@ -56,7 +56,7 @@ mod tests {
     #[test]
     fn finds_settings_by_id() {
         let lens = find("camera.lens").unwrap();
-        assert_eq!(lens.default, "back");
+        assert_eq!(lens.default, "front");
         assert_eq!(lens.scope, Scope::Shared);
         assert_eq!(find("speaker.quietPc").unwrap().scope, Scope::Pc);
         assert!(find("nothing").is_none());

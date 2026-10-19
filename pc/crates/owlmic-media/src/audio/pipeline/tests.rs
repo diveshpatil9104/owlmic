@@ -84,8 +84,8 @@ fn test_output_resampled_to_device_rate() {
 fn jittery_tone_levels() -> Vec<f64> {
     let jb = JitterBuffer::new();
     jb.set_level(1);
-    jb.set_ns_enabled(false); // RNNoise would take a steady tone for noise
-    jb.set_agc_enabled(false);
+    jb.set_noise(0, None); // RNNoise would take a steady tone for noise
+    jb.set_auto_level(false);
     let mut tone: Vec<i16> = (0..48_000 * 5)
         .map(|n| {
             ((2.0 * std::f64::consts::PI * 12_000.0 * n as f64 / 48_000.0).sin() * 8000.0) as i16
@@ -138,8 +138,8 @@ fn test_high_frequencies_stay_steady_under_jitter() {
 fn test_gaps_fade_instead_of_clicking() {
     let jb = JitterBuffer::new();
     jb.set_level(1);
-    jb.set_ns_enabled(false);
-    jb.set_agc_enabled(false);
+    jb.set_noise(0, None);
+    jb.set_auto_level(false);
     jb.push_samples(&mut [16_000i16; USB_TARGET_MS * SAMPLES_PER_MS]);
     let mut out = [0.0f32; 1_440]; // more than the buffer holds
     jb.pop_samples(&mut out, 1);

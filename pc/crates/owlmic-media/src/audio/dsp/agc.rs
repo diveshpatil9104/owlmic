@@ -1,190 +1,231 @@
-//! Automatic Gain Control (AGC) for microphone audio.
+//! Automatic Gain Control (AGC) for microphone audio: the voice at one steady loudness, however
+//! far from the phone the speaker sits.
 //!
-//! Tracks speech energy using an asymmetric peak envelope follower, applies
-//! smoothed gain to target a consistent speech level, suppresses amplification
-//! during silence (noise gating), and prevents digital clipping with a soft limiter.
+//! It works per 10 ms frame. Only speech frames (clearly above the room's noise floor, see
+//! floor.rs) move it: a smoothed speech level, quick to come down for a louder voice and slower
+//! to rise for a quieter one, sets the gain that brings it to the target. Between words the gain
+//! holds, so the room never swells up in the pauses. The user's volume goes on top, then a peak
+//! catch and a soft limiter keep it from clipping.
+
+use super::floor::Frame;
+
+/// Where speech lands, as frame RMS in dBFS.
+const TARGET_DB: f32 = -20.0;
+
+/// A voice 2 m from the phone needs about +25 dB; a shout up close about -15 dB.
+const MAX_GAIN_DB: f32 = 30.0;
+const MIN_GAIN_DB: f32 = -20.0;
+
+/// The speech level follows a louder frame by this much of the difference, a quieter one by the
+/// second: syllables vary by 10 dB or more, and the level should sit near the loud ones.
+const LEVEL_UP: f32 = 0.3;
+const LEVEL_DOWN: f32 = 0.08;
+
+/// The gain moves towards where it should be by these fractions a frame: fast down (a voice that
+/// came closer), gentler up. Together they settle well under a second.
+const GAIN_DOWN: f32 = 0.5;
+const GAIN_UP: f32 = 0.15;
+
+/// The peak catch keeps a frame's loudest sample under this.
+const PEAK: f32 = 29_000.0;
 
 pub struct Agc {
-    envelope: f32,
-    gain: f32,
-    attack_coef: f32,
-    release_coef: f32,
-    gain_smooth_coef: f32,
-    target_amplitude: f32,
-    max_gain: f32,
-    min_gain: f32,
-    silence_threshold: f32,
+    /// The smoothed level of speech frames, in dBFS; none before the first one.
+    speech_db: Option<f32>,
+    /// The leveling gain now, held through pauses.
+    gain_db: f32,
+    /// The linear gain (leveling and volume) the last frame ended with: the next one ramps from it.
+    applied: f32,
 }
 
 impl Agc {
-    /// Creates a new AGC processor.
-    ///
-    /// - `sample_rate`: Audio sample rate in Hz (typically 48000.0).
-    /// - `target_dbfs`: Target speech peak level relative to 16-bit full scale (e.g. -14.0 dBFS).
-    /// - `max_gain_db`: Maximum gain boost for quiet speech (e.g. 18.0 dB).
-    pub fn new(sample_rate: f32, target_dbfs: f32, max_gain_db: f32) -> Self {
-        const FULL_SCALE: f32 = 32767.0;
-        let attack_time = 0.008; // 8 ms attack for speech transients
-        let release_time = 0.250; // 250 ms release hold between syllables
-        let gain_smooth_time = 0.015; // 15 ms gain smoothing to prevent distortion
-
-        let target_ratio = 10.0f32.powf(target_dbfs / 20.0);
-        let max_gain_ratio = 10.0f32.powf(max_gain_db / 20.0);
-        // Silence gate at -42 dBFS: avoid amplifying background noise when not speaking
-        let silence_ratio = 10.0f32.powf(-42.0 / 20.0);
-
+    pub fn new() -> Self {
         Self {
-            envelope: 0.0,
-            gain: 1.0,
-            attack_coef: (-1.0 / (attack_time * sample_rate)).exp(),
-            release_coef: (-1.0 / (release_time * sample_rate)).exp(),
-            gain_smooth_coef: (-1.0 / (gain_smooth_time * sample_rate)).exp(),
-            target_amplitude: FULL_SCALE * target_ratio,
-            max_gain: max_gain_ratio,
-            min_gain: 0.125, // Down to -18 dB attenuation for loud shouts
-            silence_threshold: FULL_SCALE * silence_ratio,
+            speech_db: None,
+            gain_db: 0.0,
+            applied: 1.0,
         }
     }
 
-    /// Processes audio samples in-place.
-    ///
-    /// Samples are 16-bit PCM values in floating point representation ([-32768.0, 32767.0]).
-    pub fn process(&mut self, samples: &mut [f32]) {
-        for sample in samples.iter_mut() {
+    /// Processes one frame in place (16-bit PCM values as floats, measured as `frame`): the
+    /// leveling when `normalize` is on, then `volume` (a linear gain the user sets on top), then
+    /// the peak catch and the soft limiter.
+    pub fn process(&mut self, samples: &mut [f32], frame: Frame, normalize: bool, volume: f32) {
+        if samples.is_empty() {
+            return;
+        }
+        let want_db = if normalize {
+            if frame.is_speech() {
+                let level = frame.level_db;
+                let speech = match self.speech_db {
+                    None => level,
+                    Some(s) if level > s => s + (level - s) * LEVEL_UP,
+                    Some(s) => s + (level - s) * LEVEL_DOWN,
+                };
+                self.speech_db = Some(speech);
+            }
+            // No speech yet: hold where the gain is.
+            self.speech_db.map_or(self.gain_db, |s| {
+                (TARGET_DB - s).clamp(MIN_GAIN_DB, MAX_GAIN_DB)
+            })
+        } else {
+            0.0
+        };
+        let rate = if want_db < self.gain_db {
+            GAIN_DOWN
+        } else {
+            GAIN_UP
+        };
+        // Leveling on, only speech moves the gain; off, it returns to unity at any time.
+        if !normalize || frame.is_speech() {
+            self.gain_db += (want_db - self.gain_db) * rate;
+        }
+
+        let mut end = db_to_gain(self.gain_db) * volume;
+        // A voice that suddenly came close: no frame goes past the peak, from its first sample.
+        let peak = samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        let mut ramp = samples.len();
+        if peak * end > PEAK {
+            end = PEAK / peak;
+            if normalize {
+                self.gain_db = gain_to_db(end / volume);
+            }
+            // Down at once: a ramp from the old gain would overshoot on the loud samples.
+            ramp = 0;
+        }
+
+        let start = self.applied;
+        for (i, sample) in samples.iter_mut().enumerate() {
             if !sample.is_finite() {
                 *sample = 0.0;
                 continue;
             }
-
-            let abs_val = sample.abs();
-
-            // Asymmetric peak envelope follower
-            if abs_val > self.envelope {
-                self.envelope =
-                    self.attack_coef * self.envelope + (1.0 - self.attack_coef) * abs_val;
+            let g = if i < ramp {
+                start + (end - start) * (i + 1) as f32 / ramp as f32
             } else {
-                self.envelope =
-                    self.release_coef * self.envelope + (1.0 - self.release_coef) * abs_val;
-            }
-
-            // Flush tiny denormals
-            if self.envelope < 1e-5 {
-                self.envelope = 0.0;
-            }
-
-            // Calculate target gain
-            let target_gain = if self.envelope > self.silence_threshold {
-                let required = self.target_amplitude / self.envelope;
-                required.clamp(self.min_gain, self.max_gain)
-            } else {
-                // Return smoothly towards unity gain during silence / noise floor
-                1.0
+                end
             };
-
-            // Smooth the gain to avoid zipper noise and audio distortion
-            self.gain =
-                self.gain_smooth_coef * self.gain + (1.0 - self.gain_smooth_coef) * target_gain;
-
-            let amplified = *sample * self.gain;
-
-            // Soft-knee limiter near digital full scale (32767) to eliminate harsh clipping
-            *sample = Self::soft_limit(amplified);
+            *sample = soft_limit(*sample * g);
         }
+        self.applied = end;
     }
 
-    /// Resets internal envelope and gain state.
+    /// Resets the speech level and the gain.
     pub fn reset(&mut self) {
-        self.envelope = 0.0;
-        self.gain = 1.0;
+        *self = Self::new();
     }
+}
 
-    /// Smooth hyperbolic soft limiter for samples exceeding 28000.0 peak.
-    #[inline(always)]
-    fn soft_limit(x: f32) -> f32 {
-        const THRESHOLD: f32 = 28000.0;
-        const MARGIN: f32 = 4767.0; // 32767.0 - 28000.0
-        let abs_x = x.abs();
-        if abs_x <= THRESHOLD {
-            x
-        } else {
-            let over = abs_x - THRESHOLD;
-            let compressed = THRESHOLD + MARGIN * (over / (over + MARGIN));
-            if x > 0.0 { compressed } else { -compressed }
-        }
+impl Default for Agc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn db_to_gain(db: f32) -> f32 {
+    10.0f32.powf(db / 20.0)
+}
+
+fn gain_to_db(gain: f32) -> f32 {
+    20.0 * gain.max(1e-6).log10()
+}
+
+/// Smooth hyperbolic soft limiter for samples exceeding 28000.0 peak.
+#[inline(always)]
+fn soft_limit(x: f32) -> f32 {
+    const THRESHOLD: f32 = 28000.0;
+    const MARGIN: f32 = 4767.0; // 32767.0 - 28000.0
+    let abs_x = x.abs();
+    if abs_x <= THRESHOLD {
+        x
+    } else {
+        let over = abs_x - THRESHOLD;
+        let compressed = THRESHOLD + MARGIN * (over / (over + MARGIN));
+        if x > 0.0 { compressed } else { -compressed }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::floor::{Floor, level_db};
     use super::*;
 
-    #[test]
-    fn it_amplifies_quiet_speech() {
-        // -14 dBFS target, 18 dB max gain
-        let mut agc = Agc::new(48000.0, -14.0, 18.0);
-        // Quiet speech: peak around 1500 (-26 dBFS), above silence threshold (~260)
-        let mut samples = vec![1500.0; 4800]; // 100 ms
-        agc.process(&mut samples);
+    /// Frames of a steady tone at `db` (frame RMS), after a quiet room so the floor is known.
+    fn run(
+        agc: &mut Agc,
+        floor: &mut Floor,
+        db: f32,
+        frames: usize,
+        normalize: bool,
+        volume: f32,
+    ) -> f32 {
+        let amp = 32768.0 * 10.0f32.powf(db / 20.0) * std::f32::consts::SQRT_2;
+        let mut last = 0.0;
+        for n in 0..frames {
+            let mut samples: Vec<f32> = (0..480)
+                .map(|i| amp * ((n * 480 + i) as f32 * 0.0262).sin())
+                .collect();
+            let frame = floor.measure(&samples);
+            agc.process(&mut samples, frame, normalize, volume);
+            last = level_db(&samples);
+        }
+        last
+    }
 
-        // After settling, gain should amplify speech toward target (~6500)
-        let last_sample = samples[samples.len() - 1];
-        assert!(
-            last_sample > 3000.0,
-            "Quiet speech should be amplified, got {last_sample}"
-        );
-        assert!(last_sample <= 32767.0, "Should not exceed full scale");
+    fn quiet_room(floor: &mut Floor) {
+        for _ in 0..100 {
+            floor.measure(&[3.0f32; 480]);
+        }
     }
 
     #[test]
-    fn it_compresses_loud_shouts() {
-        let mut agc = Agc::new(48000.0, -14.0, 18.0);
-        // Very loud speech at 28000 amplitude
-        let mut samples = vec![28000.0; 4800];
-        agc.process(&mut samples);
+    fn quiet_and_loud_speech_both_land_on_the_target() {
+        for db in [-48.0, -30.0, -10.0] {
+            let (mut agc, mut floor) = (Agc::new(), Floor::new());
+            quiet_room(&mut floor);
+            let out = run(&mut agc, &mut floor, db, 100, true, 1.0);
+            assert!((out - TARGET_DB).abs() < 1.0, "{db} dBFS in, {out} out");
+        }
+    }
 
-        let last_sample = samples[samples.len() - 1];
+    #[test]
+    fn volume_goes_on_top_and_off_leaves_the_level() {
+        let (mut agc, mut floor) = (Agc::new(), Floor::new());
+        quiet_room(&mut floor);
+        let out = run(&mut agc, &mut floor, -35.0, 100, true, db_to_gain(6.0));
+        assert!((out - (TARGET_DB + 6.0)).abs() < 1.0, "+6 dB gave {out}");
+
+        let (mut agc, mut floor) = (Agc::new(), Floor::new());
+        quiet_room(&mut floor);
+        let out = run(&mut agc, &mut floor, -35.0, 100, false, 1.0);
+        assert!((out + 35.0).abs() < 0.1, "leveling off moved it to {out}");
+        let out = run(&mut agc, &mut floor, -35.0, 100, false, 0.5);
         assert!(
-            last_sample < 28000.0,
-            "Loud speech should be attenuated, got {last_sample}"
+            (out + 41.0).abs() < 0.2,
+            "the volume still applies with leveling off: {out}"
         );
     }
 
     #[test]
-    fn it_does_not_boost_silence_noise_floor() {
-        let mut agc = Agc::new(48000.0, -14.0, 18.0);
-        // Low background noise below silence threshold (e.g. 50.0 amplitude)
-        let mut samples = vec![50.0; 4800];
-        agc.process(&mut samples);
-
-        let last_sample = samples[samples.len() - 1];
-        // Since it's below threshold, gain should remain near unity (1.0)
-        assert!(
-            (last_sample - 50.0).abs() < 5.0,
-            "Silence should remain unamplified, got {last_sample}"
-        );
+    fn a_loud_burst_never_clips() {
+        let (mut agc, mut floor) = (Agc::new(), Floor::new());
+        quiet_room(&mut floor);
+        run(&mut agc, &mut floor, -48.0, 100, true, 1.0);
+        let amp = 30_000.0;
+        let mut samples: Vec<f32> = (0..480).map(|i| amp * (i as f32 * 0.0262).sin()).collect();
+        let frame = floor.measure(&samples);
+        agc.process(&mut samples, frame, true, db_to_gain(12.0));
+        assert!(samples.iter().all(|s| s.abs() <= PEAK + 1.0));
     }
 
     #[test]
     fn it_handles_non_finite_samples() {
-        let mut agc = Agc::new(48000.0, -14.0, 18.0);
+        let mut agc = Agc::new();
+        let mut floor = Floor::new();
         let mut samples = vec![f32::NAN, f32::INFINITY, -f32::INFINITY, 1000.0];
-        agc.process(&mut samples);
-
-        assert_eq!(samples[0], 0.0);
-        assert_eq!(samples[1], 0.0);
-        assert_eq!(samples[2], 0.0);
+        let frame = floor.measure(&[1000.0; 4]);
+        agc.process(&mut samples, frame, true, 1.0);
+        assert_eq!(&samples[..3], &[0.0, 0.0, 0.0]);
         assert!(samples[3].is_finite());
-    }
-
-    #[test]
-    fn it_resets_cleanly() {
-        let mut agc = Agc::new(48000.0, -14.0, 18.0);
-        let mut samples = vec![20000.0; 480];
-        agc.process(&mut samples);
-        assert!(agc.envelope > 0.0);
-
-        agc.reset();
-        assert_eq!(agc.envelope, 0.0);
-        assert_eq!(agc.gain, 1.0);
     }
 }

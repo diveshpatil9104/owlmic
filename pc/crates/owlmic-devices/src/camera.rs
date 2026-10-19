@@ -24,24 +24,25 @@ const RETRY_OPEN: Duration = Duration::from_secs(1);
 /// Decoder errors in a row before the stream waits for a keyframe (SYSTEM_DESIGN section 14.8).
 const ERRORS_BEFORE_RESYNC: u32 = 3;
 
-/// What the PC shows, changed live from the panel (SYSTEM_DESIGN section 17.2).
+/// What the PC shows, changed live from the panel (SYSTEM_DESIGN section 17.2). Fit until told
+/// otherwise: the whole picture, never cropped by default.
 #[derive(Default)]
 pub struct Shape {
-    fit: AtomicBool,
+    fill: AtomicBool,
     mirror: AtomicBool,
 }
 
 impl Shape {
     pub fn set(&self, framing: Framing, mirror: bool) {
-        self.fit.store(framing == Framing::Fit, Ordering::Relaxed);
+        self.fill.store(framing == Framing::Fill, Ordering::Relaxed);
         self.mirror.store(mirror, Ordering::Relaxed);
     }
 
     fn get(&self) -> (Framing, bool) {
-        let framing = if self.fit.load(Ordering::Relaxed) {
-            Framing::Fit
-        } else {
+        let framing = if self.fill.load(Ordering::Relaxed) {
             Framing::Fill
+        } else {
+            Framing::Fit
         };
         (framing, self.mirror.load(Ordering::Relaxed))
     }
