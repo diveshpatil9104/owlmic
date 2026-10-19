@@ -1,7 +1,6 @@
 package com.owlmic.ui
 
 import android.view.OrientationEventListener
-import androidx.compose.ui.Alignment
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -42,20 +41,6 @@ class TurnTest {
         assertEquals(0f, uprightAngle(TURN_NONE))
         assertEquals(90f, uprightAngle(TURN_LEFT))
         assertEquals(-90f, uprightAngle(TURN_RIGHT))
-    }
-
-    @Test
-    fun theReadersCornersFollowThePhone() {
-        assertEquals(Alignment.TopStart, spotOf(Spot.TOP_START, TURN_NONE))
-        assertEquals(Alignment.BottomCenter, spotOf(Spot.BOTTOM, TURN_NONE))
-        // Top to the left: the screen's right edge is the reader's top, its left edge the reader's bottom.
-        assertEquals(Alignment.TopEnd, spotOf(Spot.TOP_START, TURN_LEFT))
-        assertEquals(Alignment.BottomEnd, spotOf(Spot.TOP_END, TURN_LEFT))
-        assertEquals(Alignment.CenterStart, spotOf(Spot.BOTTOM, TURN_LEFT))
-        // Top to the right: the mirror image.
-        assertEquals(Alignment.BottomStart, spotOf(Spot.TOP_START, TURN_RIGHT))
-        assertEquals(Alignment.TopStart, spotOf(Spot.TOP_END, TURN_RIGHT))
-        assertEquals(Alignment.CenterEnd, spotOf(Spot.BOTTOM, TURN_RIGHT))
     }
 
     @Test

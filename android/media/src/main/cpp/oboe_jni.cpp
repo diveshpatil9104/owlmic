@@ -28,17 +28,23 @@ jlong open(oboe::AudioStreamBuilder &builder, int channels) {
     return reinterpret_cast<jlong>(h);
 }
 
+// The low latency path skips the platform's voice processing (its echo canceller among it) on many phones, so a stream
+// that needs it asks for the normal path.
+oboe::PerformanceMode mode(jboolean lowLatency) {
+    return lowLatency ? oboe::PerformanceMode::LowLatency : oboe::PerformanceMode::None;
+}
+
 }  // namespace
 
 extern "C" {
 
 // preset: an AAudio input preset (6 voice recognition, 7 voice communication). The stream gets its own audio session,
 // so the Java side can attach or switch off the platform's effects on it.
-JNIEXPORT jlong JNICALL Java_com_owlmic_media_audio_Oboe_openInput(JNIEnv *, jclass, jint preset) {
+JNIEXPORT jlong JNICALL Java_com_owlmic_media_audio_Oboe_openInput(JNIEnv *, jclass, jint preset, jboolean lowLatency) {
     oboe::AudioStreamBuilder builder;
     builder.setDirection(oboe::Direction::Input)
         ->setSharingMode(oboe::SharingMode::Shared)
-        ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
+        ->setPerformanceMode(mode(lowLatency))
         ->setFormat(oboe::AudioFormat::I16)
         ->setChannelCount(1)
         ->setSampleRate(kSampleRate)
@@ -49,11 +55,11 @@ JNIEXPORT jlong JNICALL Java_com_owlmic_media_audio_Oboe_openInput(JNIEnv *, jcl
 }
 
 // usage: 1 media, 2 voice communication. contentType: 1 speech, 2 music.
-JNIEXPORT jlong JNICALL Java_com_owlmic_media_audio_Oboe_openOutput(JNIEnv *, jclass, jint channels, jint usage, jint contentType) {
+JNIEXPORT jlong JNICALL Java_com_owlmic_media_audio_Oboe_openOutput(JNIEnv *, jclass, jint channels, jint usage, jint contentType, jboolean lowLatency) {
     oboe::AudioStreamBuilder builder;
     builder.setDirection(oboe::Direction::Output)
         ->setSharingMode(oboe::SharingMode::Shared)
-        ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
+        ->setPerformanceMode(mode(lowLatency))
         ->setFormat(oboe::AudioFormat::I16)
         ->setChannelCount(channels)
         ->setSampleRate(kSampleRate)

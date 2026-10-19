@@ -1,8 +1,9 @@
 package com.owlmic.media.camera
 
 import com.owlmic.core.hub.LinkKind
+import kotlin.math.roundToInt
 
-/** Size, frame rate and starting bitrate for the camera stream (section 17.2). */
+/** Size (as the 16:9 frame), frame rate and starting bitrate for the camera stream (section 17.2). */
 data class VideoPlan(val longSide: Int, val shortSide: Int, val fps: Int, val bitrate: Int) {
     companion object {
         /**
@@ -26,6 +27,71 @@ data class VideoPlan(val longSide: Int, val shortSide: Int, val fps: Int, val bi
         }
     }
 }
+
+/**
+ * The picture's shape. [FULL], the default, is everything the sensor captures at its own aspect, upright for whoever
+ * holds the phone (4:3 sideways, 3:4 upright on most phones): nothing is cut. The others are exactly what the PC
+ * receives, [wide]:[tall], however the phone is held, and cut from the camera's frame only because the user picked them.
+ */
+enum class Ratio(val value: String, val wide: Int, val tall: Int) {
+    FULL("full", 0, 0),
+    WIDE("16:9", 16, 9),
+    CLASSIC("4:3", 4, 3),
+    SQUARE("1:1", 1, 1),
+    TALL("9:16", 9, 16),
+    ;
+
+    companion object {
+        fun of(value: String?) = entries.firstOrNull { it.value == value } ?: FULL
+    }
+}
+
+/**
+ * Which of the sensor's frames the camera is bound for: its 4:3 one, or its 16:9 one. [FULL] takes the sensor's own
+ * ([sensorWide] for the rare sensor whose whole area is 16:9); a preset takes the frame it loses the least of.
+ */
+fun boundFourByThree(ratio: Ratio, sensorWide: Boolean): Boolean = when (ratio) {
+    Ratio.FULL -> !sensorWide
+    Ratio.CLASSIC, Ratio.SQUARE -> true
+    Ratio.WIDE, Ratio.TALL -> false
+}
+
+/**
+ * The encoded width and height of [plan] in [ratio]: the plan's short side stays, the other follows the ratio. For
+ * [Ratio.FULL] it follows [frame], the camera's upright picture (width to height), and is null until that is known.
+ */
+fun outputSize(plan: VideoPlan, ratio: Ratio, frame: Pair<Int, Int>? = null): Pair<Int, Int>? = when (ratio) {
+    Ratio.FULL -> frame?.takeIf { it.first > 0 && it.second > 0 }?.let { fullSize(plan.shortSide, it) }
+    Ratio.WIDE -> plan.longSide to plan.shortSide
+    Ratio.TALL -> plan.shortSide to plan.longSide
+    Ratio.CLASSIC -> plan.shortSide * 4 / 3 to plan.shortSide
+    Ratio.SQUARE -> plan.shortSide to plan.shortSide
+}
+
+/**
+ * The whole [frame] (upright width to height) at [short] pixels on its short side. The long side is rounded to a
+ * multiple of 16, as encoders like it: at most 8 pixels off the exact shape, too little to see.
+ */
+fun fullSize(short: Int, frame: Pair<Int, Int>): Pair<Int, Int> {
+    val (w, h) = frame
+    val long = (short.toDouble() * maxOf(w, h) / minOf(w, h) / 16).roundToInt().coerceAtLeast(1) * 16
+    return if (w >= h) long to short else short to long
+}
+
+/** The starting bitrate for a [width]×[height] picture: the plan's, in proportion to the pixels it carries. */
+fun bitrateFor(plan: VideoPlan, width: Int, height: Int): Int =
+    (plan.bitrate.toLong() * width * height / (plan.longSide.toLong() * plan.shortSide)).toInt()
+
+/** The size the camera is bound for, in the sensor's own landscape terms: CameraX compares it with sizes as the sensor gives them. */
+fun boundSize(plan: VideoPlan, fourByThree: Boolean): Pair<Int, Int> =
+    if (fourByThree) plan.shortSide * 4 / 3 to plan.shortSide else plan.longSide to plan.shortSide
+
+/** Whether a sensor's active area of [width]×[height] is 16:9 rather than 4:3 (or close to them). */
+fun sensorIsWide(width: Int, height: Int): Boolean =
+    width > 0 && height > 0 && maxOf(width, height).toDouble() / minOf(width, height) > WIDE_SENSOR
+
+/** Halfway between 4:3 (1.33) and 16:9 (1.78). */
+private const val WIDE_SENSOR = 1.55
 
 /**
  * Bitrate adaptation (section 17.2): loss above 2% or a rising round trip lowers the bitrate by 20%, at most every 2 s;
@@ -112,4 +178,15 @@ fun centerCrop(w: Int, h: Int, ow: Int, oh: Int): Pair<Float, Float> {
     val src = w.toFloat() / h
     val dst = ow.toFloat() / oh
     return if (src > dst) (dst / src) to 1f else 1f to (src / dst)
+}
+
+/**
+ * What the preview's backdrop shows of an upright [w]×[h] picture: the part that is sent (centred, [ow]:[oh]), and of
+ * that, the centre that covers a [cw]:[ch] area. A blurred duplicate of the shown picture, never what was cut from it.
+ * Returns (x scale, y scale) of the whole picture, each ≤ 1.
+ */
+fun coverCrop(w: Int, h: Int, ow: Int, oh: Int, cw: Int, ch: Int): Pair<Float, Float> {
+    val (sx, sy) = centerCrop(w, h, ow, oh)
+    val (cx, cy) = centerCrop(ow, oh, cw, ch)
+    return sx * cx to sy * cy
 }

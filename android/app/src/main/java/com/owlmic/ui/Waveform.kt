@@ -1,8 +1,6 @@
 package com.owlmic.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,11 +28,12 @@ import kotlin.math.sqrt
 private const val BARS = 25
 
 /**
- * The mic's sound wave from the prototype: 25 rounded bars that move with the real mic level. Big in the middle of the
- * preview while the camera is off; [docked] small in a strip at the bottom while the camera shows.
+ * The mic's sound wave from the prototype: 25 rounded bars that move with the real mic level. It fills the space it is
+ * given, from the whole preview (only the mic on) down to the capsule at the bottom (with the camera), so a move between
+ * the two is one smooth change of size.
  */
 @Composable
-fun Waveform(docked: Boolean, modifier: Modifier = Modifier) {
+fun Waveform(modifier: Modifier = Modifier) {
     val level by Owlmic.level.collectAsState()
     val time = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
@@ -47,36 +46,27 @@ fun Waveform(docked: Boolean, modifier: Modifier = Modifier) {
             }
         }
     }
-    val barW = if (docked) 3.5.dp else 5.dp
-    val gapW = if (docked) 4.dp else 6.dp
-    val boxH = if (docked) 24.dp else 80.dp
-    val minH = if (docked) 3.5.dp else 5.dp
-    val maxH = if (docked) 19.dp else 74.dp
-    val wave = Modifier.width(barW * BARS + gapW * (BARS - 1)).height(boxH)
-    val bars: @Composable () -> Unit = {
-        Canvas(if (docked) wave else modifier.then(wave)) {
-            val t = time.floatValue
-            val w = barW.toPx()
-            val step = w + gapW.toPx()
-            val lo = minH.toPx()
-            val hi = maxH.toPx()
-            val boost = max(0f, level.coerceAtLeast(0.06f) * 2.2f)
-            val center = (BARS - 1) / 2f
-            for (i in 0 until BARS) {
-                val envelope = max(0.2f, cos(abs(i - center) / center * PI.toFloat() * 0.46f))
-                val motion = (sin(t * 5.2f + i * 0.52f) + sin(t * 9.1f + i * 1.1f) * 0.5f + cos(t * 14f + i * 0.28f) * 0.25f) / 1.75f
-                val fraction = max(0.08f, boost * 0.95f + (motion + 1) * 0.14f * (0.2f + boost)) * envelope
-                val h = lo + (hi - lo) * min(1f, fraction)
-                drawRoundRect(
-                    Theme.ink,
-                    topLeft = Offset(i * step, (size.height - h) / 2),
-                    size = Size(w, h),
-                    cornerRadius = CornerRadius(w / 2, w / 2),
-                )
-            }
+    Canvas(modifier) {
+        val t = time.floatValue
+        val step = size.width / BARS
+        val w = minOf(step * 0.5f, 6.dp.toPx())
+        val lo = minOf(w, size.height)
+        val hi = size.height
+        val loud = waveLevel(level)
+        val center = (BARS - 1) / 2f
+        for (i in 0 until BARS) {
+            val envelope = max(0.2f, cos(abs(i - center) / center * PI.toFloat() * 0.46f))
+            val motion = (sin(t * 5.2f + i * 0.52f) + sin(t * 9.1f + i * 1.1f) * 0.5f + cos(t * 14f + i * 0.28f) * 0.25f) / 1.75f
+            val fraction = max(0.08f, loud * 0.95f + (motion + 1) * 0.14f * (0.2f + loud)) * envelope
+            val h = lo + (hi - lo) * min(1f, fraction)
+            drawRoundRect(
+                Theme.ink,
+                topLeft = Offset(i * step + (step - w) / 2, (size.height - h) / 2),
+                size = Size(w, h),
+                cornerRadius = CornerRadius(w / 2, w / 2),
+            )
         }
     }
-    if (docked) StripBox(modifier) { bars() } else bars()
 }
 
 /**

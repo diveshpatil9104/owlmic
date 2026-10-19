@@ -1,5 +1,6 @@
 package com.owlmic.media.audio
 
+import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
@@ -31,20 +32,42 @@ enum class MicCodec(val wire: String, val frameMs: Int, val bitrate: Int) {
 }
 
 /**
- * [voiceCommunication]: the Speaker is on, so Android's echo canceller must run. [noiseReduction]: the phone's own
- * noise suppressor. Automatic gain control is always off.
+ * [voiceCommunication]: the Speaker is on and voice isolation keeps it out of the mic: the mic takes the voice path with
+ * Android's echo canceller, and the [EchoSuppressor] takes out what it leaves. [noiseReduction]: the phone's own noise
+ * suppressor. Automatic gain control is always off; the PC levels the voice and applies the volume (its noise plan in
+ * pc/crates/owlmic-media/src/hub.rs).
  */
-data class MicConfig(val codec: MicCodec, val voiceCommunication: Boolean, val noiseReduction: Boolean, val boostDb: Int)
+data class MicConfig(val codec: MicCodec, val voiceCommunication: Boolean, val noiseReduction: Boolean) {
+    companion object {
+        /** The mic for [codec] from the mic settings, while the Speaker is on or not ([speakerOn]). */
+        fun of(codec: MicCodec, speakerOn: Boolean, settings: Map<String, String>) = MicConfig(
+            codec,
+            voiceCommunication = speakerOn && isolates(settings),
+            noiseReduction = phoneSuppresses(settings),
+        )
+
+        /** Voice isolation: the echo canceller runs while the Speaker plays. On unless turned off. */
+        fun isolates(settings: Map<String, String>) = settings["mic.isolation"] != "off"
+
+        /**
+         * The phone's suppressor runs from level 5 of the noise reduction slider up; below, the PC alone reduces noise,
+         * more gently. A missing or unreadable level is the default, 5.
+         */
+        fun phoneSuppresses(settings: Map<String, String>) = (settings["mic.noiseReduction"]?.toIntOrNull() ?: 5) >= 5
+    }
+}
 
 /**
  * The phone's mic (section 17.1): Oboe capture at 48 kHz mono in 10 ms frames on its own urgent-audio thread, the
- * boost, the level, and the codec for the link. A watchdog reopens the stream when frames stop for 500 ms or the device
- * goes away, so the mic never stays silent (section 14.8, step 1).
+ * level, and the codec for the link. A watchdog reopens the stream when frames stop for 500 ms or the device
+ * goes away, so the mic never stays silent (section 14.8, step 1). [farEnd] is what the Speaker played, for the echo
+ * suppressor.
  */
 class MicPipeline(
     private val out: MediaOut,
     private val onLevel: (Float) -> Unit,
     private val onHealth: (Health) -> Unit,
+    private val farEnd: FarEnd = FarEnd(),
 ) {
     @Volatile private var config: MicConfig? = null
 
@@ -100,7 +123,12 @@ class MicPipeline(
     }
 
     private fun open(c: MicConfig): Capture? {
-        val handle = Oboe.openInput(if (c.voiceCommunication) Oboe.PRESET_VOICE_COMMUNICATION else Oboe.PRESET_VOICE_RECOGNITION)
+        // Isolating, the voice path on the normal (not the low latency) route, where the phone's voice processing runs.
+        val handle = if (c.voiceCommunication) {
+            Oboe.openInput(Oboe.PRESET_VOICE_COMMUNICATION, lowLatency = false)
+        } else {
+            Oboe.openInput(Oboe.PRESET_VOICE_RECOGNITION, lowLatency = true)
+        }
         if (handle == 0L) return null
         val session = Oboe.sessionId(handle)
         val effects = mutableListOf<AudioEffect>()
@@ -108,6 +136,10 @@ class MicPipeline(
             // Automatic gain made voices pump in the first version; it stays off whatever the preset turns on.
             if (AutomaticGainControl.isAvailable()) runCatching { AutomaticGainControl.create(session)?.let { it.enabled = false; effects += it } }
             if (NoiseSuppressor.isAvailable()) runCatching { NoiseSuppressor.create(session)?.let { it.enabled = c.noiseReduction; effects += it } }
+            // The voice preset asks for the echo canceller; attached to the mic's own session, it is on for sure.
+            if (AcousticEchoCanceler.isAvailable()) {
+                runCatching { AcousticEchoCanceler.create(session)?.let { it.enabled = c.voiceCommunication; effects += it } }
+            }
         }
         return Capture(handle, effects)
     }
@@ -126,6 +158,7 @@ class MicPipeline(
         var lastData = SystemClock.elapsedRealtime()
         var healthy: Boolean? = null
         val meter = LevelMeter()
+        val echo = EchoSuppressor()
         var frames = 0
         while (generation == mine) {
             val want = config ?: break
@@ -166,7 +199,8 @@ class MicPipeline(
             filled = 0
             if (healthy != true) onHealth(Health.Ok).also { healthy = true }
 
-            SoftLimiter.apply(frame, FRAME, SoftLimiter.gainFor(cfg.boostDb))
+            // What the Speaker left in the mic goes before anything measures or sends the frame.
+            if (cfg.voiceCommunication) echo.process(frame, FRAME, farEnd.loudest()) else echo.reset()
             if (frames++ % LEVEL_EVERY == 0) onLevel(meter.add(frame))
             if (paused) continue
             val ts = SystemClock.elapsedRealtimeNanos() / 1_000

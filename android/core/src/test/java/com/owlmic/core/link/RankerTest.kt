@@ -65,6 +65,16 @@ class RankerTest {
     }
 
     @Test
+    fun aBlockedPcIsLeftOut() {
+        val k = known(PcMemory("a", "A", true, lastUsedAt = 20, blocked = true), PcMemory("y", "Y", false, 0, blocked = true))
+        assertEquals(listOf("b"), Ranker.order(listOf(pc("a"), pc("b")), k, now).map { it.pcId })
+        // The last used PC is blocked: the other one is dialled. Of two new PCs, one blocked: no choice to make.
+        assertEquals(Decision.Connect(pc("b")), Ranker.decide(listOf(pc("a"), pc("b")), k, now))
+        assertEquals(Decision.Connect(pc("x")), Ranker.decide(listOf(pc("x"), pc("y")), k, now))
+        assertEquals(Decision.Wait, Ranker.decide(listOf(pc("a")), k, now))
+    }
+
+    @Test
     fun nothingFoundMeansWait() {
         assertEquals(Decision.Wait, Ranker.decide(emptyList(), emptyMap(), now))
     }

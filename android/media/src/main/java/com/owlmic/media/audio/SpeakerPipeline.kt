@@ -12,9 +12,10 @@ data class SpeakerFormat(val codec: String, val channels: Int, val frameMs: Int)
 /**
  * The PC's sound on the phone (section 17.3): packets go into the [Smoother] on the carrier's thread; a playback thread
  * pulls one frame at a time, decodes or conceals it, and writes it to Oboe, which paces the loop. Usage Media for full
- * quality, Voice Communication while the mic is on so Android's echo canceller hears what plays.
+ * quality, Voice Communication on the normal path while voice isolation needs Android's echo canceller to hear what
+ * plays. Each frame's level goes to [farEnd], for the mic's echo suppressor.
  */
-class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
+class SpeakerPipeline(private val onHealth: (Health) -> Unit, private val farEnd: FarEnd = FarEnd()) : SpeakerSink {
     @Volatile private var smoother: Smoother? = null
 
     @Volatile private var format: SpeakerFormat? = null
@@ -96,6 +97,7 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
                     f.channels,
                     if (voiceCommunication) Oboe.USAGE_VOICE_COMMUNICATION else Oboe.USAGE_MEDIA,
                     if (voiceCommunication) Oboe.CONTENT_SPEECH else Oboe.CONTENT_MUSIC,
+                    lowLatency = !voiceCommunication,
                 )
                 decoder = if (f.codec == "opus") OpusDecoder(f.channels) else null
                 pcm = ShortArray(48 * f.frameMs * f.channels)
@@ -127,6 +129,7 @@ class SpeakerPipeline(private val onHealth: (Health) -> Unit) : SpeakerSink {
                 Smoother.Pull.Silence -> pcm.fill(0)
             }
             val written = Oboe.write(handle, pcm, frameSamples, WRITE_TIMEOUT_MS)
+            if (written > 0) farEnd.played(levelDb(pcm))
             if (written < 0) {
                 reopen = true
                 if (healthy != false) onHealth(Health.Degraded("speaker restarting")).also { healthy = false }

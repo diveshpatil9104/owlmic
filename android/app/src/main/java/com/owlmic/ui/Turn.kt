@@ -2,12 +2,19 @@ package com.owlmic.ui
 
 import android.view.OrientationEventListener
 import android.view.Surface
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
+import com.owlmic.core.design.Tokens
 import com.owlmic.media.camera.surfaceRotationFor
 
 /*
@@ -50,9 +57,48 @@ fun uprightAngle(turn: Int): Float = when (turn) {
     else -> 0f
 }
 
-/** The current [turn] and the [angle] glyphs are drawn at, which follows it over 250 ms. */
+/** A [turn] and the [angle] things are drawn at for it. */
 class Upright(val turn: Int, val angle: State<Float>) {
     val sideways get() = turn != TURN_NONE
+}
+
+/**
+ * A change of hold, in three steps, so nothing on the preview ever jumps: what is drawn on the preview fades out, the
+ * tiles' icons turn, then the preview's content fades back in, laid out for the new hold.
+ */
+@Stable
+class TurnSequence(start: Int) {
+    private var iconTurn by mutableIntStateOf(start)
+    private val iconAngle = Animatable(uprightAngle(start))
+
+    /** The preview's content (and the drawers and settings over it): laid out for this turn, faded by [fade]. */
+    var layoutTurn by mutableIntStateOf(start)
+        private set
+    private val layoutAngle = mutableFloatStateOf(uprightAngle(start))
+    private val fading = Animatable(1f)
+
+    val icons get() = Upright(iconTurn, iconAngle.asState())
+    val layout get() = Upright(layoutTurn, layoutAngle)
+    val fade: State<Float> get() = fading.asState()
+
+    /** Runs the three steps towards [turn]; [onLayout] hears the moment the content changes, while it is faded out. */
+    suspend fun follow(turn: Int, onLayout: (Int) -> Unit) {
+        val fadeMs = Tokens.Phone.TURN_FADE_MS.toInt()
+        if (turn == layoutTurn && turn == iconTurn) {
+            // The first hold (the app may open sideways), or turned back before anything moved: undo any fade that had
+            // started, and say how the content is laid out.
+            onLayout(turn)
+            fading.animateTo(1f, tween(fadeMs))
+            return
+        }
+        fading.animateTo(0f, tween(fadeMs))
+        iconTurn = turn
+        iconAngle.animateTo(uprightAngle(turn), tween(Tokens.Phone.TURN_MS.toInt()))
+        layoutTurn = turn
+        layoutAngle.floatValue = uprightAngle(turn)
+        onLayout(turn)
+        fading.animateTo(1f, tween(fadeMs))
+    }
 }
 
 /**
@@ -69,30 +115,6 @@ fun Modifier.upright(up: Upright, swap: Boolean = false): Modifier {
         this
     }
     return laidOut.graphicsLayer { rotationZ = up.angle.value }
-}
-
-/** A corner or edge as the reader sees it. */
-enum class Spot { TOP_START, TOP_END, BOTTOM }
-
-/** Where [spot] is on the upright screen for [turn]. */
-fun spotOf(spot: Spot, turn: Int): Alignment = when (turn) {
-    // The phone's top is on the reader's left: the screen's right edge is the reader's top.
-    TURN_LEFT -> when (spot) {
-        Spot.TOP_START -> Alignment.TopEnd
-        Spot.TOP_END -> Alignment.BottomEnd
-        Spot.BOTTOM -> Alignment.CenterStart
-    }
-    // The phone's top is on the reader's right: the screen's left edge is the reader's top.
-    TURN_RIGHT -> when (spot) {
-        Spot.TOP_START -> Alignment.BottomStart
-        Spot.TOP_END -> Alignment.TopStart
-        Spot.BOTTOM -> Alignment.CenterEnd
-    }
-    else -> when (spot) {
-        Spot.TOP_START -> Alignment.TopStart
-        Spot.TOP_END -> Alignment.TopEnd
-        Spot.BOTTOM -> Alignment.BottomCenter
-    }
 }
 
 /** The wordmark's letters in screen order, left to right: reversed when the reader's top is the screen's right. */

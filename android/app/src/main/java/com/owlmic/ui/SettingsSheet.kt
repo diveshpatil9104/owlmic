@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -42,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.owlmic.Owlmic
 import com.owlmic.core.design.SettingsModel
 import com.owlmic.core.design.Tokens
@@ -51,8 +51,9 @@ import com.owlmic.core.R as Copy
 
 /**
  * The settings sheet (section 31): every phone setting inline. It opens by long-pressing a feature tile, at that
- * feature's section ([startAt]); the main screen gives it the window's insets and turns it with the phone. Choices are segmented rows, never dialogs. Changes go to the Settings Hub, which saves
- * them and syncs them with the PC.
+ * feature's section ([startAt]); the main screen gives it the window's insets and turns it with the phone. Choices are
+ * segmented rows, sliders or switches, never dialogs. Changes go to the Settings Hub, which saves them and syncs them
+ * with the PC.
  */
 @Composable
 fun SettingsSheet(state: AppState, startAt: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -73,7 +74,7 @@ fun SettingsSheet(state: AppState, startAt: String, onClose: () -> Unit, modifie
             Modifier.fillMaxWidth().height(Tokens.Phone.HEADER_DP.dp).background(Theme.tile).padding(start = Theme.padding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicText(stringResource(Copy.string.ui_settings), Modifier.weight(1f), style = Theme.title)
+            BasicText(stringResource(Copy.string.ui_settings), Modifier.weight(1f), style = Theme.title.copy(fontSize = 20.sp, lineHeight = 26.sp))
             val close = stringResource(Copy.string.ui_close)
             Box(Modifier.size(Tokens.Phone.HEADER_DP.dp).clickable(onClickLabel = close, onClick = onClose), contentAlignment = Alignment.Center) {
                 Icon(Glyph.CLOSE, Theme.text, close)
@@ -81,28 +82,34 @@ fun SettingsSheet(state: AppState, startAt: String, onClose: () -> Unit, modifie
         }
         Column(Modifier.padding(top = line).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(line)) {
             Section(Copy.string.section_mic) {
-                Choice(state, "mic.noiseReduction", Copy.string.setting_mic_noise_reduction)
-                Choice(state, "mic.boost", Copy.string.setting_mic_boost)
+                Item { SettingSlider(state, "mic.noiseReduction", Copy.string.setting_mic_noise_reduction) }
+                Item { SettingSlider(state, "mic.volume", Copy.string.setting_mic_volume, fromMiddle = true) }
+                Item { SettingToggle(state, "mic.isolation", Copy.string.setting_mic_isolation) }
+                Item { SettingToggle(state, "mic.autoLevel", Copy.string.setting_mic_auto_level) }
             }
             Section(Copy.string.section_camera, Modifier.onGloballyPositioned { cameraAt = it.positionInParent().y.toInt() }) {
                 Choice(state, "camera.lens", Copy.string.setting_camera_lens)
                 Choice(state, "camera.quality", Copy.string.setting_camera_quality)
                 Choice(state, "camera.frameRate", Copy.string.setting_camera_frame_rate)
                 Choice(state, "camera.orientation", Copy.string.setting_camera_orientation)
+                Choice(state, "camera.ratio", Copy.string.setting_camera_ratio)
+                Item { SettingToggle(state, "camera.mirrorPreview", Copy.string.setting_camera_mirror_preview) }
             }
             Section(Copy.string.section_speaker, Modifier.onGloballyPositioned { speakerAt = it.positionInParent().y.toInt() }) {
                 Note(stringResource(Copy.string.phone_speaker_help))
             }
             Section(Copy.string.section_connection) {
-                Choice(state, "link.usbDebugging", Copy.string.setting_link_usb_debugging)
-                Choice(state, "link.usbTethering", Copy.string.setting_link_usb_tethering)
-                Choice(state, "link.wifi", Copy.string.setting_link_wifi)
-                Choice(state, "link.bluetooth", Copy.string.setting_link_bluetooth)
+                Item { SettingToggle(state, "link.usbDebugging", Copy.string.setting_link_usb_debugging) }
+                Item { SettingToggle(state, "link.wifi", Copy.string.setting_link_wifi) }
+                Item { SettingToggle(state, "link.usbTethering", Copy.string.setting_link_usb_tethering) }
+                Item { SettingToggle(state, "link.bluetooth", Copy.string.setting_link_bluetooth) }
                 Addresses(state)
             }
             Section(Copy.string.section_pcs) {
-                if (state.knownPcs.isEmpty()) Note(stringResource(Copy.string.phone_no_pcs))
-                state.knownPcs.forEach { pc ->
+                // Blocked PCs live in the connection list, under its line.
+                val pcs = state.knownPcs.filter { !it.blocked }
+                if (pcs.isEmpty()) Note(stringResource(Copy.string.phone_no_pcs))
+                pcs.forEach { pc ->
                     ItemRow(pc.name, if (pc.current) stringResource(Copy.string.ui_connected) else null, stringResource(Copy.string.ui_forget)) {
                         Owlmic.post(AppMsg.Forget(pc.id))
                     }
@@ -124,7 +131,7 @@ private fun Section(title: Int, modifier: Modifier = Modifier, content: @Composa
         BasicText(
             stringResource(title).uppercase(),
             Modifier.padding(horizontal = Theme.padding, vertical = Theme.padding / 2),
-            style = Theme.caption.copy(color = Theme.text2),
+            style = Theme.pageLabel,
         )
         content()
     }
@@ -132,16 +139,18 @@ private fun Section(title: Int, modifier: Modifier = Modifier, content: @Composa
 
 @Composable
 private fun Note(text: String) {
-    BasicText(text, Modifier.padding(horizontal = Theme.padding, vertical = 8.dp), style = Theme.body.copy(color = Theme.text2))
+    BasicText(text, Modifier.padding(horizontal = Theme.padding, vertical = 8.dp), style = Theme.pageDetail)
+}
+
+/** A slider or switch with the sheet's side padding. */
+@Composable
+private fun Item(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = Theme.padding, vertical = 6.dp)) { content() }
 }
 
 private fun valueLabel(value: String): Int = when (value) {
-    "phone" -> Copy.string.value_phone
-    "phoneAndPc" -> Copy.string.value_phone_and_pc
     "off" -> Copy.string.value_off
     "on" -> Copy.string.value_on
-    "plus6" -> Copy.string.value_plus6
-    "plus12" -> Copy.string.value_plus12
     "back" -> Copy.string.value_back
     "front" -> Copy.string.value_front
     "auto" -> Copy.string.value_auto
@@ -152,34 +161,41 @@ private fun valueLabel(value: String): Int = when (value) {
     "60" -> Copy.string.value_60
     "landscape" -> Copy.string.value_landscape
     "portrait" -> Copy.string.value_portrait
+    "full" -> Copy.string.value_ratio_full
+    "16:9" -> Copy.string.value_ratio169
+    "4:3" -> Copy.string.value_ratio43
+    "1:1" -> Copy.string.value_ratio11
+    "9:16" -> Copy.string.value_ratio916
     "fill" -> Copy.string.value_fill
     else -> Copy.string.value_fit
 }
 
-/** A setting as a label over a segmented row of all its values; the current one is white. */
+/** A setting as a label over a segmented row of all its values; the current one carries a tick. */
 @Composable
 private fun Choice(state: AppState, id: String, label: Int) {
     val def = SettingsModel.find(id) ?: return
     val current = state.settings[id] ?: def.default
     val line = hairline()
     Column(Modifier.fillMaxWidth().padding(horizontal = Theme.padding, vertical = 8.dp)) {
-        BasicText(stringResource(label), Modifier.padding(bottom = 8.dp), style = Theme.body)
+        BasicText(stringResource(label), Modifier.padding(bottom = 8.dp), style = Theme.pageText)
         Row(Modifier.fillMaxWidth().background(Theme.hairline).padding(line), horizontalArrangement = Arrangement.spacedBy(line)) {
             def.values.forEach { value ->
                 val selected = value == current
-                Box(
+                Row(
                     Modifier
                         .weight(1f)
                         .heightIn(min = Theme.touch)
-                        .background(if (selected) Theme.on else Theme.tile)
+                        .background(if (selected) Theme.chipOn else Theme.tile)
                         .semantics { this.selected = selected }
-                        .clickable(role = Role.RadioButton) { if (!selected) Owlmic.post(AppMsg.Setting(id, value)) },
-                    contentAlignment = Alignment.Center,
+                        .clickable(role = Role.RadioButton) { if (!selected) Owlmic.post(AppMsg.Setting(id, value)) }
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (selected) Icon(Glyph.CHECK, Theme.text, null, Modifier.padding(end = 4.dp), size = 14.dp, stroke = 2.6f)
                     BasicText(
                         stringResource(valueLabel(value)),
-                        Modifier.padding(horizontal = 4.dp),
-                        style = Theme.body.copy(color = if (selected) Theme.onContent else Theme.text, textAlign = TextAlign.Center),
+                        style = Theme.pageText.copy(fontSize = 15.sp, color = if (selected) Theme.text else Theme.text2, textAlign = TextAlign.Center),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -193,11 +209,11 @@ private fun Choice(state: AppState, id: String, label: Int) {
 private fun ItemRow(name: String, detail: String?, action: String, onAction: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = Theme.touch).padding(start = Theme.padding), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            BasicText(name, style = Theme.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (detail != null) BasicText(detail, style = Theme.caption.copy(color = Theme.text2))
+            BasicText(name, style = Theme.pageText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (detail != null) BasicText(detail, style = Theme.pageDetail)
         }
         Box(Modifier.heightIn(min = Theme.touch).clickable(onClick = onAction).padding(horizontal = Theme.padding), contentAlignment = Alignment.Center) {
-            BasicText(action, style = Theme.body.copy(color = Theme.text2))
+            BasicText(action, style = Theme.pageText.copy(color = Theme.text2))
         }
     }
 }
@@ -214,16 +230,16 @@ private fun Addresses(state: AppState) {
     BasicText(
         stringResource(Copy.string.phone_add_pc),
         Modifier.padding(start = Theme.padding, end = Theme.padding, top = 8.dp),
-        style = Theme.body,
+        style = Theme.pageText,
     )
     Row(Modifier.fillMaxWidth().padding(start = Theme.padding), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).heightIn(min = Theme.touch), contentAlignment = Alignment.CenterStart) {
-            if (typed.isEmpty()) BasicText(stringResource(Copy.string.phone_address_hint), style = Theme.body.copy(color = Theme.disabled, fontFamily = Theme.mono))
+            if (typed.isEmpty()) BasicText(stringResource(Copy.string.phone_address_hint), style = Theme.pageText.copy(color = Theme.disabled, fontFamily = Theme.mono))
             BasicTextField(
                 typed,
                 { typed = it },
                 Modifier.fillMaxWidth(),
-                textStyle = Theme.body.copy(fontFamily = Theme.mono),
+                textStyle = Theme.pageText.copy(fontFamily = Theme.mono),
                 singleLine = true,
                 cursorBrush = SolidColor(Theme.text),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
@@ -231,7 +247,7 @@ private fun Addresses(state: AppState) {
             )
         }
         Box(Modifier.heightIn(min = Theme.touch).clickable { add() }.padding(horizontal = Theme.padding), contentAlignment = Alignment.Center) {
-            BasicText(stringResource(Copy.string.ui_add), style = Theme.body)
+            BasicText(stringResource(Copy.string.ui_add), style = Theme.pageText)
         }
     }
     state.manualAddresses.forEach { address ->
@@ -243,29 +259,23 @@ private fun Addresses(state: AppState) {
 @Composable
 private fun About() {
     val context = LocalContext.current
-    val uri = LocalUriHandler.current
-    // A phone without a browser has nothing to open a link with; the tap then does nothing.
-    val open: (String) -> Unit = { url -> runCatching { uri.openUri(url) } }
     val version = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var notices by remember { mutableStateOf<String?>(null) }
     Note(stringResource(Copy.string.ui_version, version))
-    Link(stringResource(Copy.string.ui_mit)) { open(LICENSE) }
-    Link(stringResource(Copy.string.ui_website)) { open(WEBSITE) }
+    Link(stringResource(Copy.string.ui_mit)) { Links.open(context, Links.LICENSE) }
+    Link(stringResource(Copy.string.ui_website)) { Links.open(context, Links.WEBSITE) }
     Link(stringResource(Copy.string.ui_licences)) {
         notices = if (notices != null) null else runCatching { context.assets.open(NOTICES).bufferedReader().use { it.readText() } }.getOrNull()
     }
     notices?.let { BasicText(it, Modifier.padding(horizontal = Theme.padding, vertical = 8.dp), style = Theme.caption.copy(color = Theme.text2)) }
-    Link(stringResource(Copy.string.ui_donate)) { open(DONATE) }
+    Link(stringResource(Copy.string.ui_donate)) { Links.open(context, Links.DONATE) }
 }
 
 @Composable
 private fun Link(text: String, onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().heightIn(min = Theme.touch).clickable(onClick = onClick).padding(horizontal = Theme.padding), contentAlignment = Alignment.CenterStart) {
-        BasicText(text, style = Theme.body)
+        BasicText(text, style = Theme.pageText)
     }
 }
 
-private const val WEBSITE = "https://owlmic.app"
-private const val LICENSE = "https://github.com/diveshpatil9104/owlmic/blob/main/LICENSE"
 private const val NOTICES = "licences.txt"
-private const val DONATE = "https://github.com/sponsors/diveshpatil9104"

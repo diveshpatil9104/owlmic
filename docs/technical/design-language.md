@@ -32,16 +32,16 @@ Owlmic adheres to a strict **pure functional** design aesthetic:
 | `color.text` | `#FFFFFF` | Primary high-contrast text |
 | `color.text2` | `#8E8E93` | Secondary text, captions, and metrics |
 | `color.disabled` | `#3A3A3C` | Disabled state or inactive indicator |
-| `color.green` | `#30D158` | Connected, OK, healthy link |
-| `color.yellow` | `#FFD60A` | Waiting for approval, reconnecting |
-| `color.red` | `#FF453A` | Disconnected, error, blocked |
+| `color.green` | `#30D158` | Connected, OK, healthy link (PC panel only) |
+| `color.yellow` | `#FFD60A` | Waiting for approval, reconnecting (PC panel only) |
+| `color.red` | `#FF453A` | Disconnected, error, blocked (PC panel only) |
 | `color.gap` | `#7E7E7E` | The 1 dp seam between phone tiles |
-| `color.ink` | `#E6E6E6` | A top tile whose drawer is open (with a black icon) |
+| `color.ink` | `#E6E6E6` | Phone icons, the sound wave, sliders and switches; a top tile whose drawer is open (with a black icon) |
 | `color.pressed` | `#1A1A1A` | A tile while pressed |
 | `color.rule` | `#1C1C1E` | Row dividers in the phone drawers |
-| `color.chip`, `color.chipOn` | `#141416`, `#151518` | Badges and strips in the preview area |
+| `color.chip`, `color.chipOn` | `#141416`, `#151518` | Buttons on the phone pages; the selected choice in settings |
 | `color.chipOnEdge`, `color.chipOffEdge` | `#3E3E44`, `#1A1A1D` | Edges of link buttons that are on and off |
-| `color.faint` | `#555558` | The drawer footer and other faint labels |
+| `color.faint` | `#555558` | Links switched off, the version on the info page |
 
 ### Typography Scale
 | Style | Phone (sp / line) | PC (px / line) | Weight | Use Case |
@@ -50,6 +50,10 @@ Owlmic adheres to a strict **pure functional** design aesthetic:
 | **Title** | 17 / 22 | 14 / 18 | 600 (SemiBold) | Tile titles, modal headings |
 | **Body** | 15 / 20 | 13 / 17 | 400 (Regular) | Primary labels, button text |
 | **Caption** | 12 / 16 | 11 / 14 | 400 (Regular) | Status copy, codecs, framerates |
+
+The phone's pages over the preview (connection, info, settings) and its controls use a size up, read at arm's length: names 17 sp SemiBold, text 16 sp, details 14 sp, section labels 13 sp SemiBold (`Theme.pageName`, `pageText`, `pageDetail`, `pageLabel`).
+
+The phone uses no colour: green, yellow and red are the PC panel's. On the phone, state reads from the icon (the link tile's globe or alert) and what is on or selected carries a tick.
 
 ### Spatial System & Geometry
 - **Base Grid Unit**: 4 px / 4 dp.
@@ -77,11 +81,19 @@ The main screen follows the prototype in `landing/proto-templates`: black tiles 
 | Band | Contents |
 | :--- | :--- |
 | Top row (72 dp) | The OWLMIC wordmark, a **?** tile that opens Setup & Help, and the link tile that opens Connection |
-| Preview area | The owl on a dot grid while the camera is off; the camera preview with its quality and fps caption and the lens flip button while it is on; the mic's sound wave; the status strip while not connected |
+| Preview area | The owl on a dot grid while nothing is on; the mic's sound wave; the camera's picture with its capsule while it is on; the status strip while not connected |
 | Bottom row (118 dp) | Camera, mic and speaker icon tiles: tap to turn on or off, long-press for that feature's settings |
 
-- **Link tile:** its icon is the link in use (Wi-Fi, USB debugging, USB tethering, Bluetooth) and its colour is the connection state: green connected, yellow looking, approving or reconnecting, red for errors. The message itself, such as the approval code, shows in the status strip.
-- **Drawers** open inside the preview area with a back arrow. Connection lists the active PC, PCs that answered (tap to choose), paired PCs and addresses added by hand, with buttons for the allowed links. Setup & Help has the three setup steps, the privacy policy and the version.
-- **Feature tiles** show a short note under the icon when paused, restarting, failed or missing a permission.
-- **Sideways:** the activity stays locked to portrait and the layout never moves. One quarter-turn value (0, 90 or 270, from an `OrientationEventListener` with 20 degrees of hysteresis past the diagonal; upside down and flat keep the last value) turns every glyph upright over 250 ms (`turnMs`): tile icons, the owl, the sound wave, strips, caption and flip button. The wordmark letters turn one by one and always read O to C top to bottom. Drawers and the settings sheet are laid out for the turned shape, then turned, so rows span the reader's width. The status bar hides while sideways, with black bands at both ends (`sideBandDp`).
-- Single activity (`MainActivity.kt`) observing immutable state from `AppHub`; screen decisions live in `ScreenModel.kt` and are unit tested. Icons are drawn in `Glyphs.kt`; the wordmark and owl are vector drawables.
+- **Text:** only what the user must read or act on. The status strip shows the PC's name and the approval code, or a step only the user can take (choose a PC, ask again, update, forget a changed PC, turn on USB tethering, try Bluetooth). Looking, connecting and reconnecting say nothing; the link tile shows them. No button carries text, except the info page's six.
+- **Link tile:** always in ink. Its icon is the link in use (USB debugging, USB tethering, Wi-Fi, Bluetooth) once connected; a globe until then; an alert when something needs the user (refused, busy, update, key changed, can't reach). While on its way the icon dims softly in and out (`linkPulseLow`, `linkPulseMs`): no blink, no glow.
+- **Feature tiles** show only their icon, slashed while off, and are dimmed until a PC is connected. Why one is paused, restarting or stuck is said to screen readers.
+- **Drawers** slide down from the top bar, from the tile that opened it, and fill the preview area. Content only, no header: the same tile or Back closes it.
+  - **Connection:** the connected PC first with a tick, then the other PCs this phone used (most recent first), new PCs that answered and addresses added by hand; blocked PCs below a line. A row is only the name; it opens in place into two rows: the address with the link it used as a quiet icon, then when it was last connected with Connect, Block, Unblock or Remove. The footer is five equal buttons: Reconnect, a line like the one above, then USB debugging, Wi-Fi, USB tethering and Bluetooth (bright when on, faint when off).
+  - **Info:** two rows of three square buttons, How-to, Privacy Policy, Rate, GitHub, Donate and Credits, and the version at the very bottom. How-to (the three steps as numbered circles on a line) and Credits open as pages of their own with only a back arrow.
+- **Controls** (`Controls.kt`): ink on black. A setting with steps is a slider whose first step is off (noise reduction) or whose middle is neutral (volume, 0 dB); on/off settings are switches with a tick on the thumb. No chevrons and no glow anywhere on the preview.
+  - **Mic only:** the sound wave sits in the middle of the preview, no wider than the capsule would be. A round settings button at the bottom right opens the mic's settings from the top, ending in a line, with the wave under it.
+  - **Camera on:** small round buttons at the top right: eye (the preview off and back on; the PC still gets the picture), mirror preview and flip, light when on. With the mic on too, the wave sits in a capsule at the bottom, 80% of the phone's width upright and the same width sideways (`capsuleWidthFraction`, `capsuleHeightDp`); tapping it grows it upward into the mic's settings, ending in a line above the wave.
+  - The round buttons rest at 20% (`controlsDimAlpha`) and work there; a touch anywhere on the preview brings them up over 200 ms (`controlsFadeMs`), and 3 s without one (`controlsIdleMs`) lets them back down.
+  - The preview is what the PC gets, fitted whole and upright for whoever holds the phone. Only when fitting leaves room, a blurred copy of the same picture fills it. A black line as wide as the grid's seam frames it.
+- **Sideways:** the activity stays locked to portrait and the layout never moves. One quarter-turn value (0, 90 or 270, from an `OrientationEventListener` with 20 degrees of hysteresis past the diagonal; upside down and flat keep the last value) drives a change in three steps: what is on the preview (and the wordmark, drawers and settings) fades out (`turnFadeMs`), the tile icons turn over 250 ms (`turnMs`), then the content fades back in laid out for the new hold. The status bar hides or comes back at that same moment. The wordmark letters turn one by one, a little apart (`wordmarkLetterGapDp`), and always read O to C top to bottom. Drawers and the settings sheet are laid out for the turned shape, then turned, so rows span the reader's width. A black band (`sideBandDp`) sits under the bottom tiles either way, and over the top tiles while sideways.
+- Single activity (`MainActivity.kt`) observing immutable state from `AppHub`; screen decisions live in `ScreenModel.kt` and are unit tested, the turn in `Turn.kt`. Icons are drawn in `Glyphs.kt`; the wordmark and owl are vector drawables.

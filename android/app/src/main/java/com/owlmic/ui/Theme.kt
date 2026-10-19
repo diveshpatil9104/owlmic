@@ -23,11 +23,7 @@ object Theme {
     val text = Color(Tokens.Color.TEXT)
     val text2 = Color(Tokens.Color.TEXT2)
     val disabled = Color(Tokens.Color.DISABLED)
-    val on = Color(Tokens.Color.ON)
     val onContent = Color(Tokens.Color.ON_CONTENT)
-    val red = Color(Tokens.Color.RED)
-    val yellow = Color(Tokens.Color.YELLOW)
-    val green = Color(Tokens.Color.GREEN)
 
     // The main screen's bento grid (the prototype in landing/proto-templates).
     val ink = Color(Tokens.Color.INK)
@@ -68,6 +64,12 @@ object Theme {
     val title = style(Tokens.Text.TITLE)
     val body = style(Tokens.Text.BODY)
     val caption = style(Tokens.Text.CAPTION)
+
+    // The pages over the preview (connection, info, settings) and the controls: larger, read at arm's length.
+    val pageName = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 19.sp, lineHeight = 24.sp, color = text)
+    val pageText = TextStyle(fontFamily = sans, fontWeight = FontWeight.Normal, fontSize = 17.sp, lineHeight = 22.sp, color = text)
+    val pageDetail = TextStyle(fontFamily = sans, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 20.sp, color = text2)
+    val pageLabel = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 18.sp, color = text2, letterSpacing = 0.6.sp)
 }
 
 /** One physical pixel, so the grid's lines stay crisp at any density (section 29.1). */

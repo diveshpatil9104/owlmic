@@ -50,8 +50,16 @@ If Owlmic Mic or Owlmic Cam shows an error, or if your phone cannot discover you
 
 ### Robotic or Stuttering Audio Over Wi-Fi
 - Wi-Fi congestion or interference can cause packet loss.
-- In Owlmic settings, ensure **Boost** is off unless necessary.
 - Switch to a 5 GHz Wi-Fi band or connect via USB cable for zero jitter.
+
+### The Other Side Hears Themselves (Echo)
+- This happens when the phone plays the call (the **Speaker** tile) and its mic picks it up again.
+- Keep **Voice isolation** on in the mic settings: it cancels the phone's own sound out of the mic, and turns the mic down when only that sound reaches it.
+- Headphones on the phone remove the echo completely.
+
+### Your Voice Is Too Quiet or Too Loud
+- Keep **Auto level** on: it brings your voice to the same loudness whether you sit close to the phone or a few metres away.
+- If it is still not right for your meeting app, use the **Volume** slider in the mic settings (it applies on top of Auto level).
 
 ---
 

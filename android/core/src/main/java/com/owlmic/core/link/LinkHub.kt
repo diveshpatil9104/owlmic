@@ -55,6 +55,14 @@ sealed interface LinkMsg {
 
     class Forget(val pcId: String) : LinkMsg
 
+    /** Never connect to [pcId] again until unblocked; [name] names a PC never paired. */
+    class Block(val pcId: String, val name: String) : LinkMsg
+
+    class Unblock(val pcId: String) : LinkMsg
+
+    /** The user's hard reconnect: drop the link and dial again at once, or retry a search without waiting. */
+    data object Reconnect : LinkMsg
+
     class Allowed(val links: Set<LinkKind>) : LinkMsg
 
     /** The app came to the screen, or a network came or went: look right away. */
@@ -153,6 +161,9 @@ class LinkHub(
     private var lastFailureAt = 0L
     private var speakerSince = 0L
     private var lastPing = 0L
+
+    /** When the connected PC's last-connected time was last saved; it is saved again each [CONNECTED_SAVE_MS]. */
+    private var lastConnectedSaved = 0L
     private var lastStandbyPing = 0L
     private val reconnector = Reconnector(now)
 
@@ -198,6 +209,13 @@ class LinkHub(
                 decide()
             }
             is LinkMsg.Forget -> forget(message.pcId)
+            is LinkMsg.Block -> block(message.pcId, message.name)
+            is LinkMsg.Unblock -> {
+                store.unblock(message.pcId)
+                emit(LinkEvent.KnownChanged)
+                if (phase == Phase.SEARCHING) decide()
+            }
+            LinkMsg.Reconnect -> reconnect()
             is LinkMsg.Allowed -> {
                 allowed = message.links
                 candidates.entries.removeAll { (_, v) -> (v.first.link !in allowed).also { gone -> if (gone) drop(v.first) } }
@@ -243,9 +261,13 @@ class LinkHub(
     private fun fresh(): List<Candidate> {
         val t = now()
         return candidates.values.filter { (c, seen) ->
-            t - seen <= CANDIDATE_TTL_MS && c.link in allowed && (failures[key(c)]?.second ?: 0) <= t
+            t - seen <= CANDIDATE_TTL_MS && c.link in allowed && (failures[key(c)]?.second ?: 0) <= t && c.pcId?.let(::isBlocked) != true
         }.map { it.first }
     }
+
+    private fun isBlocked(id: String) = store.pc(id)?.blocked == true
+
+    private fun addressOf(c: Candidate): String? = c.host?.hostAddress?.let { if (c.tcpPort > 0) "$it:${c.tcpPort}" else it } ?: c.btAddress
 
     private fun decide() {
         if (attempt != null) return
@@ -265,7 +287,7 @@ class LinkHub(
                 connect(d.candidate, Purpose.PRIMARY, resume)
             }
             is Decision.Choose -> if (phase == Phase.SEARCHING) {
-                emit(LinkEvent.Choices(d.candidates.mapNotNull { c -> c.pcId?.let { PcChoice(it, c.name) } }))
+                emit(LinkEvent.Choices(d.candidates.mapNotNull { c -> c.pcId?.let { PcChoice(it, c.name, addressOf(c), c.link) } }))
                 setConnection(Connection.Choosing(d.candidates.size))
             }
             Decision.Wait -> Unit
@@ -309,7 +331,7 @@ class LinkHub(
                 LinkKind.USB_TETHERING, LinkKind.WIFI -> tcp(dial(c.host ?: error("no address"), c.tcpPort))
                 LinkKind.BLUETOOTH -> bluetooth!!.connect(c.btAddress ?: error("no address"), BLUETOOTH_DIAL_MS).let { s -> ControlChannel(s.inputStream, s.outputStream, s) }
             }
-            val hs = Handshake(store.identity, store.phoneId, phoneName(), model, store::key)
+            val hs = Handshake(store.identity, store.phoneId, phoneName(), model, blocked = ::isBlocked, remembered = store::key)
             val r = hs.run(channel, c.link, a.resume, Watchdog.on(channel)) { pc, code -> post(LinkMsg.AttemptPending(a.id, pc, code)) }
             if (r is Handshake.Result.Welcomed) session = open(c, channel, r)
             r
@@ -376,8 +398,15 @@ class LinkHub(
                 failures.remove(key(c))
                 unreachable = null
                 val s = m.session!!
-                if (a.purpose == Purpose.PRIMARY) {
-                    store.remember(r.pcId, r.pcName, r.pcStaticPub, r.pairingKey, r.btAddr)
+                if (isBlocked(r.pcId)) {
+                    // Blocked while the handshake ran: the session it opened says BYE and goes. Started, so its close
+                    // comes back as Closed and a tunnel is released the usual way.
+                    startReading(s)
+                    s.send(Bye(BYE_REASON))
+                    later(DRAIN_MS) { s.close() }
+                    blockedAttempt(a)
+                } else if (a.purpose == Purpose.PRIMARY) {
+                    store.remember(r.pcId, r.pcName, r.pcStaticPub, r.pairingKey, r.btAddr, addressOf(s), s.link)
                     val resumed = (phase == Phase.HELD || phase == Phase.WAITING) && r.pcId == pcId
                     activate(s, resumed)
                 } else if (active != null && r.pcId == pcId && s.link != active!!.link) {
@@ -421,6 +450,10 @@ class LinkHub(
                 phase = Phase.KEY_CHANGED
                 setConnection(Connection.KeyChanged(r.pcName))
             }
+            is Handshake.Result.Blocked -> {
+                if (c.link == LinkKind.USB_DEBUGGING) seeker.tunnelReleased()
+                blockedAttempt(a)
+            }
             is Handshake.Result.Failed -> {
                 if (c.link == LinkKind.USB_DEBUGGING) seeker.tunnelReleased()
                 backoff(c, null)
@@ -432,6 +465,12 @@ class LinkHub(
                 }
             }
         }
+    }
+
+    /** An attempt that reached a blocked PC: its way in waits a long while, and the search goes on without it. */
+    private fun blockedAttempt(a: Attempt) {
+        backoff(a.candidate, BLOCKED_RETRY_MS)
+        if (a.purpose == Purpose.PRIMARY && phase != Phase.HELD && phase != Phase.WAITING) searching(fresh = false)
     }
 
     /** Remembers that handshakes with [c]'s PC keep failing, for "Can't reach" after 10 s. */
@@ -467,6 +506,7 @@ class LinkHub(
         startReading(s)
         pace()
         lastPing = 0
+        lastConnectedSaved = now()
         // Connected first: the App Hub answers Welcomed with STATE and STREAM_STARTs, which go out only while connected.
         setConnection(Connection.Connected(w.pcName, s.link, s.hotspot, address = addressOf(s)))
         emit(LinkEvent.Welcomed(w.pcId, w.pcName, s.link, w.settings, resumed))
@@ -515,15 +555,16 @@ class LinkHub(
         router.use(s.path)
         pace()
         setConnection(Connection.Connected(pcName, s.link, s.hotspot, address = addressOf(s)))
+        pcId?.let { store.connectedVia(it, addressOf(s), s.link) }
         emit(LinkEvent.Switched(s.link))
+        emit(LinkEvent.KnownChanged)
     }
 
-    private fun addressOf(s: LinkSession): String? {
-        val c = s.candidate
-        return c.host?.hostAddress?.let { if (c.tcpPort > 0) "$it:${c.tcpPort}" else it } ?: c.btAddress
-    }
+    private fun addressOf(s: LinkSession): String? = addressOf(s.candidate)
 
     private fun hold(s: LinkSession) {
+        // Connected until now: the list's "last connected" reads from the moment the link went.
+        pcId?.let(store::connectedNow)
         heldSessionId = s.sessionId.toHex()
         phase = Phase.HELD
         heldAt = now()
@@ -619,6 +660,10 @@ class LinkHub(
             a.send(Ping(Monitor.nowUs()))
             a.monitor.report(router.speakerStats, thermal())?.let(a::send)
         }
+        if (t - lastConnectedSaved >= CONNECTED_SAVE_MS) {
+            lastConnectedSaved = t
+            pcId?.let(store::connectedNow)
+        }
         (connection as? Connection.Connected)?.let { c ->
             val weak = a.monitor.weak()
             if (c.weak != weak) setConnection(c.copy(weak = weak))
@@ -680,7 +725,7 @@ class LinkHub(
         if (pcId == id) {
             // BYE goes out first; the link closes once it has had time to leave.
             active?.let { s ->
-                s.send(Bye("forgotten"))
+                s.send(Bye(BYE_REASON))
                 later(DRAIN_MS) { s.close() }
             }
             standby?.close()
@@ -697,6 +742,74 @@ class LinkHub(
             searching()
         }
         emit(LinkEvent.KnownChanged)
+    }
+
+    /**
+     * Blocks [id]: its candidates go, a choice listing it is made again without it, and if it is the connected PC the
+     * session ends with BYE, as when it is forgotten, and the phone looks for another.
+     */
+    private fun block(id: String, name: String) {
+        if (pcId == id && active != null) store.connectedNow(id)
+        val answered = candidates.values.firstOrNull { it.first.pcId == id }?.first
+        store.block(id, name, answered?.let(::addressOf), answered?.link)
+        candidates.entries.removeAll { (_, v) -> (v.first.pcId == id).also { gone -> if (gone) drop(v.first) } }
+        // A handshake with it in flight is forgotten; its session is closed when it lands.
+        if (attempt?.candidate?.pcId == id) {
+            attempt = null
+            if (phase == Phase.CONNECTING || phase == Phase.APPROVING) searching(fresh = false)
+        }
+        if (pcId == id) {
+            active?.let { s ->
+                s.send(Bye(BYE_REASON))
+                later(DRAIN_MS) { s.close() }
+            }
+            standby?.close()
+            active = null
+            standby = null
+            router.use(null)
+            pcId = null
+            heldSessionId = null
+            emit(LinkEvent.Ended)
+            searching()
+        } else if (id == keyChangedPc || id == deniedPc) {
+            keyChangedPc = null
+            deniedPc = null
+            searching()
+        } else if (connection is Connection.Choosing) {
+            emit(LinkEvent.Choices(emptyList()))
+            searching(fresh = false)
+        }
+        emit(LinkEvent.KnownChanged)
+        if (phase == Phase.SEARCHING) decide()
+    }
+
+    /**
+     * The user's hard reconnect (the Reconnect button). Connected: the links close, as a dead link would, so the session
+     * is held and dialled again within a tick and resumes with fresh keys. Looking, held or turned away: every wait is
+     * cleared and the search starts over now. A handshake already running is left to finish.
+     */
+    private fun reconnect() {
+        failures.clear()
+        probation.clear()
+        unreachable = null
+        lastFailureAt = 0
+        when (phase) {
+            Phase.ACTIVE -> {
+                standby?.close()
+                active?.close()
+                return
+            }
+            Phase.CONNECTING, Phase.APPROVING -> {
+                seeker.burst()
+                return
+            }
+            Phase.DENIED -> deniedPc?.let(store::clearRefusal)
+            Phase.HELD, Phase.WAITING, Phase.SEARCHING, Phase.BUSY, Phase.UPDATE, Phase.KEY_CHANGED -> Unit
+        }
+        deniedPc = null
+        if (phase != Phase.HELD && phase != Phase.WAITING) searching()
+        seeker.burst()
+        decide()
     }
 
     /** Back to looking. [fresh] restarts the clock for the "not found" messages and the Bluetooth offer. */
@@ -734,6 +847,7 @@ class LinkHub(
     }
 
     override fun close() {
+        if (active != null) pcId?.let(store::connectedNow)
         seeker.close()
         wifi?.close()
         active?.close()
@@ -751,6 +865,11 @@ class LinkHub(
         const val PROBATION_MS = 10_000L
         const val CANT_REACH_AFTER_MS = 10_000L
         const val KEY_CHANGED_RETRY_MS = 30_000L
+        const val BLOCKED_RETRY_MS = 60_000L
+        const val CONNECTED_SAVE_MS = 60_000L
+
+        /** BYE's reason is free text; the PC treats a block like being forgotten. */
+        const val BYE_REASON = "forgotten"
         val RETRY_MS = longArrayOf(500, 1_000, 2_000)
         // The PC takes at most 4 handshakes a minute from one address (section 15.5).
         const val BUSY_RETRY_MS = 15_000L

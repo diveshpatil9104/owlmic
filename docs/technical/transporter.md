@@ -97,3 +97,14 @@ When an active session exists on a lower-priority carrier (e.g., Wi-Fi) and a hi
 - **Timeout & Watchdog**: If no packets or heartbeats arrive for 3,000 ms, the link is declared dead.
 - **Session Hold (30 Seconds)**: When a link dies unexpectedly, the PC does *not* teardown virtual camera or microphone devices. It enters a 30-second **Session Hold** state. If the phone reconnects on another carrier within 30 seconds, streaming resumes immediately.
 - **Anti-Flap Hysteresis**: If a carrier fails twice in succession, it is placed in a 10-second penalty box before another promotion attempt is allowed.
+
+---
+
+## 6. Blocked PCs & Reconnect
+
+- **Blocking a PC**: The phone's connection list can block any PC it has met, paired or not. The block lives in the phone's store (`blocked`, with the PC's last address), so it survives restarts. A blocked PC is left out of ranking: it is never dialled on its own, never offered as a choice, and a tap on it never connects.
+- **Blocking the Connected PC**: The session ends with `BYE`, as when the PC is forgotten, and the phone goes back to searching without it. A handshake with that PC still in flight is dropped.
+- **Blocked Behind a Cable**: A USB debugging tunnel only learns which PC it reaches from `HELLO_ACK`. If that PC is blocked, the phone hangs up before `PROOF`, so the PC never pairs or holds a session, and the tunnel waits 60 seconds before it is tried again.
+- **Unblocking**: The PC is an ordinary candidate again at once. A PC that was blocked without ever pairing is forgotten entirely.
+- **Connection History**: For each PC the phone's store keeps when it was last connected, and the address and link of that connection, for the connection list. The time is saved at the welcome, again every minute while connected (so a crash or a pulled cable leaves a close value) and when the link goes; the address and link follow a switch too. A PC that answered but never connected keeps where and how it answered, and no time.
+- **Reconnect**: The phone's hard reconnect. While connected, the links close as a dead link would, so the session is held and dialled again within a second and resumes with fresh keys. While searching, held, refused, busy or asked to update, every backoff and penalty is cleared and the search starts over at once. A handshake already running is left to finish.
