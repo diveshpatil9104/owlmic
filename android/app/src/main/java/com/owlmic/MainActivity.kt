@@ -50,9 +50,7 @@ class MainActivity : ComponentActivity() {
         object : OrientationEventListener(this) {
             override fun onOrientationChanged(degrees: Int) {
                 val next = nextTurn(degrees, turn.intValue)
-                if (next == turn.intValue) return
-                turn.intValue = next
-                showStatusBar(next == TURN_NONE)
+                if (next != turn.intValue) turn.intValue = next
             }
         }
     }
@@ -61,7 +59,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.BLACK), SystemBarStyle.dark(android.graphics.Color.BLACK))
         super.onCreate(savedInstanceState)
         asking = savedInstanceState?.getString(ASKING)
-        setContent { MainScreen(turn.intValue, onFeature = ::tap, onTryBluetooth = ::tryBluetooth, onTethering = ::openTethering) }
+        setContent {
+            MainScreen(
+                turn.intValue,
+                // The status bar goes or comes back with the screen's content, while it is faded out.
+                onLayoutTurn = { showStatusBar(it == TURN_NONE) },
+                onFeature = ::tap,
+                onTryBluetooth = ::tryBluetooth,
+                onTethering = ::openTethering,
+            )
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { Owlmic.state.collect(::askNotificationsOnceOn) }
         }

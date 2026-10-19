@@ -16,50 +16,64 @@ import org.junit.Test
 
 class ScreenModelTest {
     @Test
-    fun theLinkTileIsGreenConnectedYellowOnTheWayRedWhenTheUserIsNeeded() {
-        assertEquals(Tone.GREEN, toneOf(Connection.Connected("PC", LinkKind.WIFI)))
-        assertEquals(Tone.YELLOW, toneOf(Connection.Connected("PC", LinkKind.WIFI, weak = true)))
+    fun theLinkTileShowsTheLinkOnceConnectedTheGlobeUntilThenOrTheAlert() {
+        assertEquals(Glyph.WIFI, glyphOf(Connection.Connected("PC", LinkKind.WIFI)))
+        assertEquals(Glyph.WIFI, glyphOf(Connection.Connected("PC", LinkKind.WIFI, weak = true)))
+        assertEquals(Glyph.PLUG, glyphOf(Connection.Connected("PC", LinkKind.USB_DEBUGGING)))
         listOf(
             Connection.Searching(),
             Connection.Choosing(2),
             Connection.Connecting("PC", LinkKind.WIFI),
-            Connection.Approving("PC", "4821", LinkKind.WIFI),
+            Connection.Approving("PC", "1", LinkKind.BLUETOOTH),
             Connection.Reconnecting("PC", LinkKind.USB_TETHERING),
             Connection.Waiting("PC"),
-        ).forEach { assertEquals(it.toString(), Tone.YELLOW, toneOf(it)) }
+        ).forEach { assertEquals(it.toString(), Glyph.GLOBE, glyphOf(it)) }
         listOf(
             Connection.Searching(unreachable = "PC"),
             Connection.Denied("PC"),
             Connection.Busy("PC", "Pixel"),
             Connection.UpdateNeeded("PC", phoneOutdated = true),
             Connection.KeyChanged("PC"),
-        ).forEach { assertEquals(it.toString(), Tone.RED, toneOf(it)) }
+        ).forEach { assertEquals(it.toString(), Glyph.ALERT, glyphOf(it)) }
     }
 
     @Test
-    fun theLinkTileShowsTheLinkOrTheUnpluggedCable() {
-        assertEquals(Glyph.WIFI, glyphOf(Connection.Connected("PC", LinkKind.WIFI)))
-        assertEquals(Glyph.PLUG, glyphOf(Connection.Connected("PC", LinkKind.USB_DEBUGGING)))
-        assertEquals(Glyph.CHAIN, glyphOf(Connection.Reconnecting("PC", LinkKind.USB_TETHERING)))
-        assertEquals(Glyph.BLUETOOTH, glyphOf(Connection.Approving("PC", "1", LinkKind.BLUETOOTH)))
-        assertEquals(Glyph.UNPLUG, glyphOf(Connection.Connecting(null, null)))
-        assertEquals(Glyph.UNPLUG, glyphOf(Connection.Searching()))
-        assertEquals(Glyph.UNPLUG, glyphOf(Connection.Waiting("PC")))
+    fun theLinkTileDimsInAndOutOnlyOnTheWay() {
+        listOf(
+            Connection.Searching(),
+            Connection.Connecting("PC", LinkKind.WIFI),
+            Connection.Approving("PC", "4821", LinkKind.WIFI),
+            Connection.Reconnecting("PC", LinkKind.WIFI),
+            Connection.Waiting("PC"),
+        ).forEach { assertTrue(it.toString(), pulses(it)) }
+        listOf(Connection.Connected("PC", LinkKind.WIFI), Connection.Searching(unreachable = "PC"), Connection.Denied("PC"), Connection.Choosing(2))
+            .forEach { assertFalse(it.toString(), pulses(it)) }
     }
 
     @Test
-    fun theStripShowsUntilConnectedAndOffersOneAction() {
-        assertFalse(showsStrip(AppState(connection = Connection.Connected("PC", LinkKind.WIFI))))
-        assertTrue(showsStrip(AppState()))
-        assertTrue(showsStrip(AppState(connection = Connection.Approving("PC", "4821", LinkKind.WIFI))))
-
-        assertNull(stripAction(AppState()))
-        assertEquals(StripAction.CHOOSE, stripAction(AppState(connection = Connection.Choosing(2))))
-        assertEquals(StripAction.ASK_AGAIN, stripAction(AppState(connection = Connection.Denied("PC"))))
+    fun theStripSpeaksOnlyWhenThereIsSomethingToReadOrDo() {
+        // Looking, connecting, reconnecting and connected say nothing: the link tile shows them.
+        listOf(
+            Connection.Searching(),
+            Connection.Searching(unreachable = "PC"),
+            Connection.Connecting("PC", LinkKind.WIFI),
+            Connection.Reconnecting("PC", null),
+            Connection.Waiting("PC"),
+            Connection.Connected("PC", LinkKind.WIFI),
+        ).forEach { assertNull(it.toString(), stripOf(AppState(connection = it))) }
+        assertEquals(Strip.CODE, stripOf(AppState(connection = Connection.Approving("PC", "4821", LinkKind.WIFI))))
+        assertEquals(Strip.CHOOSE, stripOf(AppState(connection = Connection.Choosing(2))))
+        assertEquals(Strip.DENIED, stripOf(AppState(connection = Connection.Denied("PC"))))
+        assertEquals(Strip.KEY_CHANGED, stripOf(AppState(connection = Connection.KeyChanged("PC"))))
         // The tethering hint wins over Bluetooth: a cable is the better link.
-        assertEquals(StripAction.TETHERING, stripAction(AppState(tetherHint = true, bluetoothOffer = true)))
-        assertEquals(StripAction.BLUETOOTH, stripAction(AppState(bluetoothOffer = true)))
-        assertNull(stripAction(AppState(connection = Connection.Reconnecting("PC", null), tetherHint = true, bluetoothOffer = true)))
+        assertEquals(Strip.TETHERING, stripOf(AppState(tetherHint = true, bluetoothOffer = true)))
+        assertEquals(Strip.BLUETOOTH, stripOf(AppState(bluetoothOffer = true)))
+        assertNull(stripOf(AppState(connection = Connection.Reconnecting("PC", null), tetherHint = true, bluetoothOffer = true)))
+
+        assertEquals(StripAction.CHOOSE, stripAction(Strip.CHOOSE))
+        assertEquals(StripAction.ASK_AGAIN, stripAction(Strip.DENIED))
+        assertEquals(StripAction.TETHERING, stripAction(Strip.TETHERING))
+        assertNull(stripAction(Strip.CODE))
     }
 
     @Test
@@ -77,23 +91,47 @@ class ScreenModelTest {
     }
 
     @Test
-    fun theConnectionListHasOnlyRealPcs() {
-        assertEquals(emptyList<PcRow>(), pcRows(AppState()))
+    fun theConnectedPcComesFirstThenTheOthersByLastUseAndBlockedOnesBelow() {
+        assertEquals(PcList(emptyList(), emptyList()), pcList(AppState()))
 
         val state = AppState(
             connection = Connection.Connected("Desk", LinkKind.WIFI, address = "192.168.1.15:7653"),
-            choices = listOf(PcChoice("b", "Laptop")),
-            knownPcs = listOf(KnownPcView("a", "Desk", current = true), KnownPcView("b", "Laptop", false), KnownPcView("c", "Studio", false)),
+            choices = listOf(PcChoice("b", "Laptop", "192.168.1.20", LinkKind.WIFI), PcChoice("n", "New", "192.168.1.30", LinkKind.WIFI)),
+            knownPcs = listOf(
+                KnownPcView("a", "Desk", current = true, lastConnectedAt = 300),
+                KnownPcView("c", "Studio", false, address = "10.0.0.7:7653", lastConnectedAt = 100, lastLink = LinkKind.USB_TETHERING),
+                KnownPcView("b", "Laptop", false, lastConnectedAt = 200),
+                KnownPcView("x", "Office", false, blocked = true, address = "10.0.0.9:7653"),
+            ),
             manualAddresses = listOf("10.0.0.42"),
         )
+        val list = pcList(state)
         assertEquals(
             listOf(
-                PcRow("Desk", "192.168.1.15:7653", LinkKind.WIFI, false, PcBadge.ACTIVE, null),
-                PcRow("Laptop", null, null, false, PcBadge.READY, "b"),
-                PcRow("Studio", null, null, false, PcBadge.STANDBY, null),
-                PcRow(null, "10.0.0.42", null, false, null, null),
+                PcRow("a", "Desk", PcKind.CURRENT, "192.168.1.15:7653", LinkKind.WIFI, lastConnectedAt = 300),
+                PcRow("b", "Laptop", PcKind.PAIRED, "192.168.1.20", LinkKind.WIFI, lastConnectedAt = 200, canConnect = true),
+                PcRow("c", "Studio", PcKind.PAIRED, "10.0.0.7:7653", LinkKind.USB_TETHERING, lastConnectedAt = 100),
+                PcRow("n", "New", PcKind.NEW, "192.168.1.30", LinkKind.WIFI, canConnect = true),
+                PcRow(null, null, PcKind.ADDRESS, "10.0.0.42"),
             ),
-            pcRows(state),
+            list.rows,
         )
+        assertEquals(listOf(PcRow("x", "Office", PcKind.BLOCKED, "10.0.0.9:7653")), list.blocked)
+    }
+
+    @Test
+    fun aBlockedPcThatAnswersIsNotOfferedAndTheLinksPutUsbThenWifiFirst() {
+        val state = AppState(choices = listOf(PcChoice("x", "Office")), knownPcs = listOf(KnownPcView("x", "Office", false, blocked = true)))
+        assertEquals(emptyList<PcRow>(), pcList(state).rows)
+        assertEquals(listOf(LinkKind.USB_DEBUGGING, LinkKind.WIFI, LinkKind.USB_TETHERING, LinkKind.BLUETOOTH), LINK_SETTINGS.map { it.first })
+    }
+
+    @Test
+    fun theSoundWaveReachesWellUpForNormalSpeechAndTheTopWhenLoud() {
+        assertEquals(0f, waveLevel(0.1f), 0f)
+        // Normal speech (about -26 dBFS, 0.71 on the meter) reaches past the middle, a fifth higher than the first round.
+        assertEquals(0.47f * 1.2f, waveLevel(0.71f), 0.02f)
+        assertEquals(1f, waveLevel(0.92f), 0.001f)
+        assertEquals(1f, waveLevel(1f), 0.001f)
     }
 }

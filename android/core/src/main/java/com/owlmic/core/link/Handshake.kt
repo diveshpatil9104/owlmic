@@ -21,12 +21,16 @@ import java.io.IOException
 /** What the phone remembers of a paired PC, to recognise it and to refuse an impostor with a different key. */
 class PcKey(val staticPub: ByteArray, val pairingKey: ByteArray)
 
-/** The phone's side of the handshake (protocol section 4 and 5). Runs on a connection thread. */
+/**
+ * The phone's side of the handshake (protocol section 4 and 5). Runs on a connection thread. A PC the user [blocked]
+ * is let go right after HELLO_ACK, before PROOF, so it never pairs or holds a session for this phone.
+ */
 class Handshake(
     private val identity: Crypto.KeyPair,
     private val phoneId: ByteArray,
     private val phoneName: String,
     private val model: String,
+    private val blocked: (pcId: String) -> Boolean = { false },
     private val remembered: (pcId: String) -> PcKey?,
 ) {
     sealed interface Result {
@@ -48,6 +52,9 @@ class Handshake(
 
         /** A paired PC answered with another key. Never trusted: the user forgets it to pair again. */
         data class KeyChanged(val pcId: String, val pcName: String) : Result
+
+        /** The PC at the other end is one the user blocked (a USB debugging tunnel only learns which PC it is here). */
+        data class Blocked(val pcId: String, val pcName: String) : Result
 
         data class Failed(val why: String) : Result
     }
@@ -81,6 +88,7 @@ class Handshake(
             val pcIdBytes = pcId.hexToBytes()
             if (pcIdBytes.size != 16) return Result.Failed("bad PC id")
             if (ack.proto != Proto.VERSION) return Result.Rejected(RejectReason.VERSION, null, pcId, ack.name, ack.proto)
+            if (blocked(pcId)) return Result.Blocked(pcId, ack.name)
             val pcStatic = ack.staticPub.fromBase64() ?: return Result.Failed("bad PC key")
             val pcEph = ack.ephPub.fromBase64() ?: return Result.Failed("bad PC key")
             val pcNonce = ack.nonce.fromBase64()?.takeIf { it.size == 32 } ?: return Result.Failed("bad PC nonce")

@@ -15,6 +15,98 @@ class VideoPlanTest {
     }
 
     @Test
+    fun theRatioSetsTheSizeTheShortSideStays() {
+        val p1080 = VideoPlan.of("1080p", 30, LinkKind.USB_DEBUGGING)
+        assertEquals(1920 to 1080, outputSize(p1080, Ratio.WIDE))
+        assertEquals(1440 to 1080, outputSize(p1080, Ratio.CLASSIC))
+        assertEquals(1080 to 1080, outputSize(p1080, Ratio.SQUARE))
+        assertEquals(1080 to 1920, outputSize(p1080, Ratio.TALL))
+        val p720 = VideoPlan.of("720p", 30, LinkKind.WIFI)
+        assertEquals(1280 to 720, outputSize(p720, Ratio.WIDE))
+        assertEquals(960 to 720, outputSize(p720, Ratio.CLASSIC))
+        assertEquals(720 to 720, outputSize(p720, Ratio.SQUARE))
+        assertEquals(720 to 1280, outputSize(p720, Ratio.TALL))
+    }
+
+    @Test
+    fun ratiosReadFromTheSettingAndTheDefaultIsTheFullFrame() {
+        assertEquals(Ratio.CLASSIC, Ratio.of("4:3"))
+        assertEquals(Ratio.TALL, Ratio.of("9:16"))
+        assertEquals(Ratio.FULL, Ratio.of("full"))
+        assertEquals(Ratio.FULL, Ratio.of(null))
+        assertEquals(Ratio.FULL, Ratio.of("21:9"))
+    }
+
+    @Test
+    fun theFullFrameKeepsTheSensorsShapeUprightForTheHold() {
+        val p1080 = VideoPlan.of("1080p", 30, LinkKind.USB_DEBUGGING)
+        val p720 = VideoPlan.of("720p", 30, LinkKind.WIFI)
+        // A 4:3 sensor: sideways 4:3, upright 3:4, nothing cut.
+        assertEquals(1440 to 1080, outputSize(p1080, Ratio.FULL, 1440 to 1080))
+        assertEquals(1080 to 1440, outputSize(p1080, Ratio.FULL, 1080 to 1440))
+        assertEquals(960 to 720, outputSize(p720, Ratio.FULL, 4032 to 3024))
+        assertEquals(720 to 960, outputSize(p720, Ratio.FULL, 3024 to 4032))
+        // A 16:9 sensor keeps 16:9.
+        assertEquals(1920 to 1080, outputSize(p1080, Ratio.FULL, 1920 to 1080))
+        assertEquals(720 to 1280, outputSize(p720, Ratio.FULL, 1080 to 1920))
+        // Until the camera has a size there is nothing to size by.
+        assertNull(outputSize(p1080, Ratio.FULL, null))
+        assertNull(outputSize(p1080, Ratio.FULL, 0 to 0))
+    }
+
+    @Test
+    fun anOddSensorRoundsTheLongSideToSixteenAndBarelyMoves() {
+        // 4080×3072 is 1.328:1; 1080 × 1.328 = 1434.4, rounded to 1440.
+        val (w, h) = fullSize(1080, 4080 to 3072)
+        assertEquals(1440 to 1080, w to h)
+        assertTrue(Math.abs(w.toDouble() / h - 4080.0 / 3072) < 0.01)
+        assertEquals(1080 to 1440, fullSize(1080, 3072 to 4080))
+        assertEquals(0, fullSize(720, 1600 to 1200).first % 16)
+    }
+
+    @Test
+    fun theFullFrameBindsTheSensorsOwnFramePresetsTheOneTheyLoseLeastOf() {
+        assertTrue(boundFourByThree(Ratio.FULL, sensorWide = false))
+        assertTrue(!boundFourByThree(Ratio.FULL, sensorWide = true))
+        assertTrue(boundFourByThree(Ratio.CLASSIC, sensorWide = true))
+        assertTrue(boundFourByThree(Ratio.SQUARE, sensorWide = false))
+        assertTrue(!boundFourByThree(Ratio.WIDE, sensorWide = false))
+        assertTrue(!boundFourByThree(Ratio.TALL, sensorWide = false))
+        assertTrue(!sensorIsWide(4032, 3024))
+        assertTrue(sensorIsWide(5120, 2880))
+        assertTrue(!sensorIsWide(0, 0))
+    }
+
+    @Test
+    fun theBackdropDuplicatesTheShownPictureNotWhatWasCut() {
+        // The full frame, upright 3:4, fitted in a tall preview: the backdrop covers it from the same picture.
+        // A preview taller than 3:4 is covered by the picture's full height and its middle 0.54 / 0.75 of the width.
+        val (fx, fy) = coverCrop(1080, 1440, 1080, 1440, 1080, 2000)
+        assertEquals(1f, fy, 0.001f)
+        assertEquals(0.54f / 0.75f, fx, 0.001f)
+        // A 16:9 preset cut from an upright 3:4 picture: the backdrop never reaches past the 16:9 band.
+        val (_, by) = coverCrop(1080, 1440, 1920, 1080, 1080, 2000)
+        val (_, band) = centerCrop(1080, 1440, 1920, 1080)
+        assertTrue(by <= band + 1e-6f)
+    }
+
+    @Test
+    fun fewerPixelsStartAtAProportionalBitrate() {
+        val p = VideoPlan.of("1080p", 30, LinkKind.USB_DEBUGGING)
+        assertEquals(p.bitrate, bitrateFor(p, 1920, 1080))
+        assertEquals(p.bitrate, bitrateFor(p, 1080, 1920))
+        assertEquals(p.bitrate * 3 / 4, bitrateFor(p, 1440, 1080))
+        assertEquals(9_000_000, bitrateFor(p, 1080, 1080))
+    }
+
+    @Test
+    fun theCameraIsBoundInTheSensorsLandscapeTermsForItsFrame() {
+        val p = VideoPlan.of("1080p", 30, LinkKind.USB_DEBUGGING)
+        assertEquals(1920 to 1080, boundSize(p, fourByThree = false))
+        assertEquals(1440 to 1080, boundSize(p, fourByThree = true))
+    }
+
+    @Test
     fun startingBitratesFollowTheTable() {
         assertEquals(4_000_000, VideoPlan.of("720p", 30, LinkKind.WIFI).bitrate)
         assertEquals(10_000_000, VideoPlan.of("720p", 30, LinkKind.USB_TETHERING).bitrate)

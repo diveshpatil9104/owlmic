@@ -59,6 +59,29 @@ pub struct Media {
     pub video: Arc<VideoReceiver>,
 }
 
+/// The noise reduction slider's default: the phone's suppressor, and the PC's only when the
+/// phone has none.
+const NOISE_DEFAULT: u8 = 5;
+
+/// What the PC does at each level of the noise reduction slider: how much RNNoise it mixes in
+/// (percent) and the noise gate's margin over the room's noise floor (dB). The phone's own
+/// suppressor runs from 5 up.
+///
+/// - 0: nothing, on the phone or the PC.
+/// - 1 to 4: the phone's suppressor is off, the PC mixes in 15, 30, 45 or 60% RNNoise.
+/// - 5: the phone's suppressor; the PC's full RNNoise only when the phone has none.
+/// - 6 to 10: both, and a gate that quiets what is left between words: whatever is not 4, 6, 8,
+///   10 or 12 dB louder than the room. Measured against the room, it treats a far voice like a
+///   near one.
+pub fn noise_plan(level: u8, phone_has_ns: bool) -> (u32, Option<i32>) {
+    match level.min(10) {
+        0 => (0, None),
+        l @ 1..=4 => (15 * l as u32, None),
+        5 => (if phone_has_ns { 0 } else { 100 }, None),
+        l => (100, Some(2 * l as i32 - 8)),
+    }
+}
+
 pub struct MediaHub {
     media: Media,
     emit: Box<dyn Fn(MediaEvent) + Send>,
@@ -70,7 +93,8 @@ pub struct MediaHub {
     mic_codec: Option<MicCodec>,
     camera_on: bool,
     speaker_codec: Option<SpeakerCodec>,
-    noise: String,
+    /// The noise reduction slider, 0 to 10.
+    noise: u8,
     phone_has_ns: bool,
     framing: Framing,
     mirror: bool,
@@ -88,9 +112,9 @@ impl MediaHub {
             mic_codec: None,
             camera_on: false,
             speaker_codec: None,
-            noise: "phone".into(),
+            noise: NOISE_DEFAULT,
             phone_has_ns: true,
-            framing: Framing::Fill,
+            framing: Framing::Fit,
             mirror: false,
             view: State::default(),
         }
@@ -100,15 +124,11 @@ impl MediaHub {
         self.paused[f as usize]
     }
 
-    /// PC noise reduction (SYSTEM_DESIGN section 17.1): with "Phone + PC", or when the phone
-    /// has no noise suppressor of its own.
+    /// PC noise reduction (SYSTEM_DESIGN section 17.1) for the slider's level and whether the
+    /// phone has a noise suppressor of its own.
     fn apply_noise(&self) {
-        let on = match self.noise.as_str() {
-            "phoneAndPc" => true,
-            "off" => false,
-            _ => !self.phone_has_ns,
-        };
-        self.media.jitter.set_ns_enabled(on);
+        let (denoise_pct, gate_margin_db) = noise_plan(self.noise, self.phone_has_ns);
+        self.media.jitter.set_noise(denoise_pct, gate_margin_db);
     }
 
     fn start_mic(&self) {
@@ -296,9 +316,14 @@ impl Hub for MediaHub {
             MediaMsg::FromPhone(_) => {}
             MediaMsg::Setting { id, value } => match id.as_str() {
                 "mic.noiseReduction" => {
-                    self.noise = value;
+                    self.noise = value.parse().unwrap_or(NOISE_DEFAULT).min(10);
                     self.apply_noise();
                 }
+                "mic.volume" => self
+                    .media
+                    .jitter
+                    .set_volume_db(value.parse::<i32>().unwrap_or(0).clamp(-12, 12)),
+                "mic.autoLevel" => self.media.jitter.set_auto_level(value != "off"),
                 "camera.framing" | "camera.mirror" => {
                     if id == "camera.framing" {
                         self.framing = if value == "fit" {
@@ -439,14 +464,58 @@ mod tests {
         s.params.insert("noiseSuppressor".into(), false.into());
         h.handle(MediaMsg::Link(1));
         h.handle(MediaMsg::FromPhone(Message::StreamStart(s)));
-        assert!(
-            h.media.jitter.is_ns_enabled(),
+        assert_eq!(
+            h.media.jitter.processing().denoise_pct,
+            100,
             "the phone has none, so the PC reduces noise"
         );
         h.handle(MediaMsg::Setting {
             id: "mic.noiseReduction".into(),
-            value: "off".into(),
+            value: "0".into(),
         });
-        assert!(!h.media.jitter.is_ns_enabled());
+        let p = h.media.jitter.processing();
+        assert_eq!((p.denoise_pct, p.gate_margin_db), (0, None));
+        h.handle(MediaMsg::Setting {
+            id: "mic.noiseReduction".into(),
+            value: "8".into(),
+        });
+        let p = h.media.jitter.processing();
+        assert_eq!((p.denoise_pct, p.gate_margin_db), (100, Some(8)));
+    }
+
+    #[test]
+    fn the_noise_slider_goes_from_nothing_to_denoise_and_a_gate() {
+        assert_eq!(noise_plan(0, true), (0, None));
+        assert_eq!(noise_plan(0, false), (0, None));
+        assert_eq!(noise_plan(2, true), (30, None));
+        assert_eq!(noise_plan(4, false), (60, None));
+        assert_eq!(
+            noise_plan(5, true),
+            (0, None),
+            "today's default: the phone's own"
+        );
+        assert_eq!(noise_plan(5, false), (100, None));
+        assert_eq!(noise_plan(6, true), (100, Some(4)));
+        assert_eq!(noise_plan(10, true), (100, Some(12)));
+        assert_eq!(noise_plan(42, true), noise_plan(10, true));
+    }
+
+    #[test]
+    fn volume_and_auto_level_reach_the_mic_processing() {
+        let (mut h, _) = hub();
+        let set = |h: &mut MediaHub, id: &str, value: &str| {
+            h.handle(MediaMsg::Setting {
+                id: id.into(),
+                value: value.into(),
+            })
+        };
+        assert_eq!(h.media.jitter.processing().volume_db, 0);
+        assert!(h.media.jitter.processing().normalize);
+        set(&mut h, "mic.volume", "-6");
+        set(&mut h, "mic.autoLevel", "off");
+        let p = h.media.jitter.processing();
+        assert_eq!((p.volume_db, p.normalize), (-6, false));
+        set(&mut h, "mic.volume", "99");
+        assert_eq!(h.media.jitter.processing().volume_db, 12);
     }
 }

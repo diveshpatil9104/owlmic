@@ -1,5 +1,7 @@
 package com.owlmic.core.settings
 
+import com.owlmic.core.hub.LinkKind
+import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -109,15 +111,113 @@ class StoreTest {
     }
 
     @Test
+    fun blocksAndAddressesSurviveARestart() {
+        val s = open()
+        s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32) { 3 }, null, "192.168.1.15:7653")
+        s.connectedVia("aa", "10.42.0.1:7653")
+        s.block("aa", "DESKTOP-A", "192.168.1.99:7653")
+        // A PC never paired is remembered only to stay blocked, with where it answered from.
+        s.block("bb", "LAPTOP-B", "192.168.1.30:7653")
+        val again = open()
+        val a = again.known().getValue("aa")
+        assertTrue(a.blocked && a.approved)
+        assertEquals("10.42.0.1:7653", a.address)
+        val b = again.known().getValue("bb")
+        assertTrue(b.blocked && !b.approved)
+        assertEquals("192.168.1.30:7653", b.address)
+        assertNull(again.key("bb"))
+    }
+
+    @Test
+    fun unblockingKeepsAPairingButDropsAPcNeverPaired() {
+        val s = open()
+        s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32), null)
+        s.block("aa", "DESKTOP-A", null)
+        s.block("bb", "LAPTOP-B", null)
+        s.unblock("aa")
+        s.unblock("bb")
+        val again = open()
+        assertFalse(again.known().getValue("aa").blocked)
+        assertNotNull(again.key("aa"))
+        assertNull(again.pc("bb"))
+    }
+
+    @Test
     fun settingsArePerPairing() {
         val s = open()
         s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32), null)
-        val changed = SettingValues.change(s.settings("aa"), "camera.lens", "front")
+        val changed = SettingValues.change(s.settings("aa"), "camera.lens", "back")
         s.saveSettings("aa", changed, setOf("camera.lens"))
         val again = open()
-        assertEquals("front", again.settings("aa").getValue("camera.lens").value)
+        assertEquals("back", again.settings("aa").getValue("camera.lens").value)
         assertEquals(setOf("camera.lens"), again.pending("aa"))
-        assertEquals("back", again.settings(null).getValue("camera.lens").value)
+        assertEquals("front", again.settings(null).getValue("camera.lens").value)
         assertNotNull(again.pc("aa"))
+    }
+
+    @Test
+    fun anUntouchedDefaultFollowsTheNewBuildsDefaultWhileAChangedValueStays() {
+        val s = open()
+        s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32), null)
+        // An older build saved its own default (version 0) next to a value the user picked (version 3).
+        val old = SettingValues.defaults() + mapOf("camera.ratio" to Versioned("16:9", 0), "camera.lens" to Versioned("back", 3))
+        s.saveSettings("aa", old, emptySet())
+        val again = open().settings("aa")
+        assertEquals("full", again.getValue("camera.ratio").value)
+        assertEquals("back", again.getValue("camera.lens").value)
+    }
+
+    @Test
+    fun theLastConnectionsTimeAddressAndLinkSurviveARestart() {
+        val s = open()
+        s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32), null, "192.168.1.15:7653", LinkKind.WIFI)
+        t = 70_000
+        s.connectedNow("aa")
+        s.connectedVia("aa", "10.42.0.1:7653", LinkKind.USB_TETHERING)
+        val pc = open().known().getValue("aa")
+        assertEquals(70_000L, pc.lastUsedAt)
+        assertEquals("10.42.0.1:7653", pc.address)
+        assertEquals(LinkKind.USB_TETHERING, pc.lastLink)
+    }
+
+    @Test
+    fun aPcNeverConnectedKeepsWhereItAnsweredAndNoTime() {
+        val s = open()
+        s.block("bb", "LAPTOP-B", "192.168.1.30:7653", LinkKind.WIFI)
+        t = 90_000
+        s.connectedNow("bb")
+        val pc = open().known().getValue("bb")
+        assertEquals(0L, pc.lastUsedAt)
+        assertEquals("192.168.1.30:7653", pc.address)
+        assertEquals(LinkKind.WIFI, pc.lastLink)
+    }
+
+    @Test
+    fun aNewWelcomeWithoutAnAddressKeepsTheLastOne() {
+        val s = open()
+        s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32) { 3 }, null, "192.168.1.15:7653", LinkKind.WIFI)
+        t = 5_000
+        // A welcome over the cable tunnel, which has no address of its own: the old address stays, the link moves.
+        s.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32) { 3 }, null, null, LinkKind.USB_DEBUGGING)
+        val pc = s.known().getValue("aa")
+        assertEquals("192.168.1.15:7653", pc.address)
+        assertEquals(LinkKind.USB_DEBUGGING, pc.lastLink)
+        assertEquals(5_000L, pc.lastUsedAt)
+    }
+
+    @Test
+    fun aFileWrittenBeforeTheHistoryFieldsStillLoads() {
+        open().remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32) { 7 }, null, "192.168.1.15:7653", LinkKind.WIFI)
+        val json = JSONObject(file.readText())
+        val pcs = json.getJSONArray("pcs")
+        repeat(pcs.length()) { i -> listOf("blocked", "address", "lastLink").forEach { pcs.getJSONObject(i).remove(it) } }
+        file.writeText(json.toString())
+        val again = open()
+        val pc = again.known().getValue("aa")
+        assertTrue(pc.approved)
+        assertFalse(pc.blocked)
+        assertNull(pc.address)
+        assertNull(pc.lastLink)
+        assertArrayEquals(ByteArray(32) { 7 }, again.key("aa")!!.pairingKey)
     }
 }

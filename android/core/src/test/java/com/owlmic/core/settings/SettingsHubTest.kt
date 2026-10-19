@@ -42,19 +42,19 @@ class SettingsHubTest {
 
         hub.post(SettingsMsg.Use("aa", connected = false))
         nextOf<SettingsEvent.Values>()
-        hub.post(SettingsMsg.Change("camera.lens", "front"))
-        assertEquals("front", nextOf<SettingsEvent.Values>().values["camera.lens"])
+        hub.post(SettingsMsg.Change("camera.lens", "back"))
+        assertEquals("back", nextOf<SettingsEvent.Values>().values["camera.lens"])
 
-        hub.post(SettingsMsg.Use("aa", connected = true, pcValues = mapOf("camera.lens" to "back", "camera.frameRate" to "30")))
+        hub.post(SettingsMsg.Use("aa", connected = true, pcValues = mapOf("camera.lens" to "front", "camera.frameRate" to "30")))
         val values = nextOf<SettingsEvent.Values>().values
-        assertEquals("front", values["camera.lens"])
+        assertEquals("back", values["camera.lens"])
         assertEquals("30", values["camera.frameRate"])
 
         // The PC's snapshot after WELCOME carries its versions; the waiting change goes out past them.
-        hub.post(SettingsMsg.Remote(listOf(SettingChange("camera.lens", "back", 40), SettingChange("camera.frameRate", "30", 41))))
+        hub.post(SettingsMsg.Remote(listOf(SettingChange("camera.lens", "front", 40), SettingChange("camera.frameRate", "30", 41))))
         val push = nextOf<SettingsEvent.Push>()
         assertEquals(listOf("camera.lens"), push.changes.map { it.id })
-        assertEquals("front", push.changes.single().value)
+        assertEquals("back", push.changes.single().value)
         assertTrue(push.changes.single().version > 41)
         hub.close()
     }
@@ -64,11 +64,11 @@ class SettingsHubTest {
         val store = store()
         store.remember("aa", "DESKTOP-A", byteArrayOf(4), ByteArray(32), null)
         val hub = SettingsHub(store) { events.put(it) }
-        hub.post(SettingsMsg.Use("aa", connected = true, pcValues = mapOf("mic.boost" to "off")))
-        hub.post(SettingsMsg.Remote(listOf(SettingChange("mic.boost", "off", 100))))
-        hub.post(SettingsMsg.Change("mic.boost", "plus6"))
+        hub.post(SettingsMsg.Use("aa", connected = true, pcValues = mapOf("mic.volume" to "0")))
+        hub.post(SettingsMsg.Remote(listOf(SettingChange("mic.volume", "0", 100))))
+        hub.post(SettingsMsg.Change("mic.volume", "6"))
         val push = nextOf<SettingsEvent.Push>()
-        assertEquals(SettingChange("mic.boost", "plus6", 101), push.changes.single())
+        assertEquals(SettingChange("mic.volume", "6", 101), push.changes.single())
         hub.close()
     }
 
@@ -79,15 +79,15 @@ class SettingsHubTest {
         val hub = SettingsHub(store) { events.put(it) }
         hub.post(SettingsMsg.Use("aa", connected = true, pcValues = emptyMap()))
         hub.post(SettingsMsg.Remote(emptyList()))
-        hub.post(SettingsMsg.Change("mic.boost", "plus6"))
+        hub.post(SettingsMsg.Change("mic.volume", "6"))
         val push = nextOf<SettingsEvent.Push>()
-        assertEquals("plus6", push.changes.single().value)
+        assertEquals("6", push.changes.single().value)
 
-        hub.post(SettingsMsg.Remote(listOf(SettingChange("mic.boost", "plus12", push.changes.single().version + 1))))
+        hub.post(SettingsMsg.Remote(listOf(SettingChange("mic.volume", "12", push.changes.single().version + 1))))
         val after = nextOf<SettingsEvent.Values>()
-        assertTrue("mic.boost" in after.changed || after.values["mic.boost"] == "plus6")
-        val applied = if (after.values["mic.boost"] == "plus12") after else nextOf()
-        assertEquals("plus12", applied.values["mic.boost"])
+        assertTrue("mic.volume" in after.changed || after.values["mic.volume"] == "6")
+        val applied = if (after.values["mic.volume"] == "12") after else nextOf()
+        assertEquals("12", applied.values["mic.volume"])
         hub.close()
     }
 }

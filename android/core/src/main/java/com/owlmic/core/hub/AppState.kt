@@ -69,11 +69,23 @@ enum class Feature { MIC, CAMERA, SPEAKER }
 
 enum class SpeakerOutput { SPEAKER, HEADPHONES, BLUETOOTH }
 
-/** A PC that answered, for the chooser. */
-data class PcChoice(val id: String, val name: String)
+/** A PC that answered, for the chooser. [address] and [link] are where and how it answered. */
+data class PcChoice(val id: String, val name: String, val address: String? = null, val link: LinkKind? = null)
 
-/** A PC this phone has paired with, for Settings → PCs. */
-data class KnownPcView(val id: String, val name: String, val current: Boolean)
+/**
+ * A PC this phone has paired with, or blocked, for the connection list and Settings → PCs. [address] and [lastLink] are
+ * where and how it was last connected (or, for a PC never connected, where it last answered); [lastConnectedAt] is
+ * when the phone was last connected to it, 0 for never.
+ */
+data class KnownPcView(
+    val id: String,
+    val name: String,
+    val current: Boolean,
+    val blocked: Boolean = false,
+    val address: String? = null,
+    val lastConnectedAt: Long = 0,
+    val lastLink: LinkKind? = null,
+)
 
 /** One immutable snapshot of everything the UI shows (section 11.2, rule 7). */
 data class AppState(

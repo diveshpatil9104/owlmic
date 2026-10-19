@@ -16,9 +16,10 @@ internal object Oboe {
         System.loadLibrary("owlmic")
     }
 
-    @JvmStatic external fun openInput(preset: Int): Long
+    /** [lowLatency] false keeps the platform's voice processing (the echo canceller) that the fast path skips. */
+    @JvmStatic external fun openInput(preset: Int, lowLatency: Boolean): Long
 
-    @JvmStatic external fun openOutput(channels: Int, usage: Int, contentType: Int): Long
+    @JvmStatic external fun openOutput(channels: Int, usage: Int, contentType: Int, lowLatency: Boolean): Long
 
     @JvmStatic external fun sessionId(handle: Long): Int
 

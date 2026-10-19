@@ -28,15 +28,16 @@ Once paired, Owlmic operates transparently. This guide covers daily controls, sw
 +------------+-----------+-----------+
 ```
 
-- **Camera, mic and speaker tiles**: tap to turn each one on or off. Long-press a tile for its settings.
-  - A short note under the icon says when it is paused, restarting, failed ("Didn't start. Tap to try again.") or needs a permission.
+- **Camera, mic and speaker tiles**: tap to turn each one on or off. Long-press a tile for its settings. They stay dimmed until your PC is connected.
 - **Preview area**: shows the owl while everything is off.
-  - With the camera on: the live picture, the quality and frame rate (for example `1080p · 30 fps`) and a button to flip between the back and front lenses.
-  - With the mic on: a sound wave that follows your voice.
-  - While not connected: a short message, such as "Looking for your PC", or the 4-digit code to approve on your PC.
-- **Link tile** (top right): its icon shows the link in use (Wi-Fi, USB debugging, USB tethering or Bluetooth) and its colour the state: green connected, yellow looking or waiting, red when something needs you. Tap it to see your PCs and choose one, and to pick which links Owlmic may use.
-- **? tile**: the three setup steps, the privacy policy and the app version.
-- **Turning the phone sideways**: the tiles stay where they are and everything on them turns upright, including the drawers and settings, so the phone can stand sideways during a call.
+  - **Mic only**: the sound wave fills the area and follows your voice. The round button at the bottom right opens the mic's settings: noise reduction (all the way left is off), volume (0 dB in the middle), voice isolation (keeps what the phone's speaker plays out of the mic) and auto level (keeps your voice at the same level near or far).
+  - **Camera on**: the whole picture the PC gets, with a blurred copy of it only where it leaves room. It starts with the front camera, and your own view is mirrored like a mirror; the PC always gets the picture the right way round. The round buttons at the top right turn your own view off and on (the PC still gets the picture), mirror your view, and flip between the lenses. With the mic on too, the wave sits in a capsule at the bottom; tap it for the mic's settings. The buttons stay faint until you touch the picture.
+  - Only when you need to do something does a short message show, such as the 4-digit code to check on your PC.
+- **Link tile** (top right): shows the link in use (Wi-Fi, USB debugging, USB tethering or Bluetooth) once connected, a globe that gently dims in and out while Owlmic looks for your PC, or an alert when something needs you. Tap it to open your PCs:
+  - The connected PC comes first with a tick, then the PCs you used before. Tap one to see its address, the link it used and when it was last connected, and to block it (blocked PCs move under the line, and Owlmic never connects to them until you unblock them).
+  - The buttons at the bottom: Reconnect (drops the link and connects again, or looks again right away), then which links Owlmic may use: USB debugging, Wi-Fi, USB tethering and Bluetooth.
+- **? tile**: How-to (the three setup steps), Privacy Policy, Rate, GitHub, Donate, Credits and the app version.
+- **Turning the phone sideways**: the tiles stay where they are; what is on the preview fades out, the icons turn, and it comes back upright, drawers and settings included, so the phone can stand sideways during a call.
 
 ---
 

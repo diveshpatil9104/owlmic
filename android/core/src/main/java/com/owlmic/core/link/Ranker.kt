@@ -31,6 +31,12 @@ data class PcMemory(
     val lastUsedAt: Long,
     /** When it last said no or was busy: such a PC moves down the list for a while, never blocked forever. */
     val refusedAt: Long = 0,
+    /** The user blocked it: it is left out entirely. */
+    val blocked: Boolean = false,
+    /** Where it was last connected, or last answered from. */
+    val address: String? = null,
+    /** The link of the last connection, or the one it last answered on. */
+    val lastLink: LinkKind? = null,
 )
 
 sealed interface Decision {
@@ -45,10 +51,14 @@ sealed interface Decision {
 object Ranker {
     const val REFUSED_FOR_MS = 10 * 60_000L
 
-    /** Best first: the PC used last, other approved PCs (recent first), new PCs, busy PCs, then those that recently said no. */
+    /**
+     * Best first: the PC used last, other approved PCs (recent first), new PCs, busy PCs, then those that recently said
+     * no. A PC the user blocked is never in the list.
+     */
     fun order(candidates: List<Candidate>, known: Map<String, PcMemory>, now: Long): List<Candidate> {
         // One entry per PC: its best link.
-        val perPc = candidates.groupBy { it.pcId ?: "usb:${it.link}" }.values.map { links -> links.minBy { it.link.ordinal } }
+        val perPc = candidates.filter { c -> c.pcId?.let { known[it]?.blocked } != true }
+            .groupBy { it.pcId ?: "usb:${it.link}" }.values.map { links -> links.minBy { it.link.ordinal } }
         val lastUsed = lastUsedId(known)
         return perPc.sortedWith(
             compareBy<Candidate>(

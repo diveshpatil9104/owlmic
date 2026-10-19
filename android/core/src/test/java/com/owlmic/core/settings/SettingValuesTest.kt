@@ -11,7 +11,7 @@ class SettingValuesTest {
 
     @Test
     fun defaultsCoverPhoneAndSharedSettingsOnly() {
-        assertEquals("back", base.getValue("camera.lens").value)
+        assertEquals("front", base.getValue("camera.lens").value)
         assertTrue("camera.orientation" in base)
         assertFalse("camera.framing" in base)
         assertFalse("speaker.quietPc" in base)
@@ -19,21 +19,21 @@ class SettingValuesTest {
 
     @Test
     fun aLocalChangeMovesPastEveryVersionSeen() {
-        val (synced, _) = SettingValues.applyRemote(base, listOf(SettingChange("mic.boost", "plus6", 7)))
-        val v = SettingValues.change(synced, "camera.lens", "front")
-        assertEquals(Versioned("front", 8), v["camera.lens"])
+        val (synced, _) = SettingValues.applyRemote(base, listOf(SettingChange("mic.volume", "6", 7)))
+        val v = SettingValues.change(synced, "camera.lens", "back")
+        assertEquals(Versioned("back", 8), v["camera.lens"])
         assertEquals(v, SettingValues.change(v, "camera.lens", "sideways"))
     }
 
     @Test
     fun theNewerChangeWinsAndTheTieGoesToThePc() {
-        val mine = SettingValues.change(base, "camera.lens", "front")
+        val mine = SettingValues.change(base, "camera.lens", "back")
         val version = mine.getValue("camera.lens").version
-        val (older, noChange) = SettingValues.applyRemote(mine, listOf(SettingChange("camera.lens", "back", version - 1)))
-        assertEquals("front", older.getValue("camera.lens").value)
+        val (older, noChange) = SettingValues.applyRemote(mine, listOf(SettingChange("camera.lens", "front", version - 1)))
+        assertEquals("back", older.getValue("camera.lens").value)
         assertTrue(noChange.isEmpty())
-        val (tie, changed) = SettingValues.applyRemote(mine, listOf(SettingChange("camera.lens", "back", version)))
-        assertEquals("back", tie.getValue("camera.lens").value)
+        val (tie, changed) = SettingValues.applyRemote(mine, listOf(SettingChange("camera.lens", "front", version)))
+        assertEquals("front", tie.getValue("camera.lens").value)
         assertEquals(setOf("camera.lens"), changed)
     }
 
@@ -41,7 +41,7 @@ class SettingValuesTest {
     fun remoteChangesToPcOnlyOrInvalidValuesAreIgnored() {
         val (v, changed) = SettingValues.applyRemote(
             base,
-            listOf(SettingChange("camera.framing", "fit", 99), SettingChange("mic.boost", "plus99", 99)),
+            listOf(SettingChange("camera.framing", "fit", 99), SettingChange("mic.volume", "99", 99)),
         )
         assertEquals(base, v)
         assertTrue(changed.isEmpty())
@@ -57,12 +57,12 @@ class SettingValuesTest {
 
     @Test
     fun theSnapshotLeavesChangesMadeWhileAwayAndTheyGoOutNewest() {
-        val mine = SettingValues.change(base, "camera.lens", "front")
-        val snapshot = listOf(SettingChange("camera.lens", "back", 20), SettingChange("mic.boost", "plus6", 21))
+        val mine = SettingValues.change(base, "camera.lens", "back")
+        val snapshot = listOf(SettingChange("camera.lens", "front", 20), SettingChange("mic.volume", "6", 21))
         val (merged, changed) = SettingValues.applyRemote(mine, snapshot, keep = setOf("camera.lens"))
-        assertEquals("front", merged.getValue("camera.lens").value)
-        assertEquals(setOf("mic.boost"), changed)
+        assertEquals("back", merged.getValue("camera.lens").value)
+        assertEquals(setOf("mic.volume"), changed)
         val bumped = SettingValues.bumpPending(merged, setOf("camera.lens"))
-        assertEquals(Versioned("front", 22), bumped["camera.lens"])
+        assertEquals(Versioned("back", 22), bumped["camera.lens"])
     }
 }

@@ -1,6 +1,7 @@
 package com.owlmic.core.settings
 
 import com.owlmic.core.fromBase64
+import com.owlmic.core.hub.LinkKind
 import com.owlmic.core.link.PcKey
 import com.owlmic.core.link.PcMemory
 import com.owlmic.core.proto.Crypto
@@ -15,8 +16,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Everything Owlmic keeps (section 18.3, section 21): the phone's identity, the PCs it paired with, their settings,
- * manual addresses and which permissions were asked. One JSON file, written atomically on [write]'s thread; secrets
+ * Everything Owlmic keeps (section 18.3, section 21): the phone's identity, the PCs it paired with (or blocked), their
+ * settings, manual addresses and which permissions were asked. One JSON file, written atomically on [write]'s thread; secrets
  * are wrapped by [wrapper] once, when they are first stored. Thread-safe.
  *
  * Opening throws when the Keystore fails for now; the caller tries again later. Only a key that is gone for good
@@ -41,6 +42,12 @@ class Store(
         var btAddress: String?,
         var settings: Map<String, Versioned>,
         var pending: Set<String>,
+        /** The user blocked it: never connected to, never offered. A blocked PC that never paired has no key. */
+        var blocked: Boolean = false,
+        /** Where it was last connected ("192.168.1.15:7653", or its Bluetooth address), or last answered from. */
+        var address: String? = null,
+        /** The link of the last connection, or the one it last answered on. */
+        var lastLink: LinkKind? = null,
     )
 
     val phoneId: ByteArray
@@ -76,7 +83,8 @@ class Store(
     }
 
     @Synchronized
-    fun known(): Map<String, PcMemory> = pcs.mapValues { (_, p) -> PcMemory(p.id, p.name, p.approved, p.lastUsedAt, p.refusedAt) }
+    fun known(): Map<String, PcMemory> =
+        pcs.mapValues { (_, p) -> PcMemory(p.id, p.name, p.approved, p.lastUsedAt, p.refusedAt, p.blocked, p.address, p.lastLink) }
 
     @Synchronized
     fun key(pcId: String): PcKey? = pcs[pcId]?.takeIf { it.approved }?.let { PcKey(it.staticPub, it.pairingKey) }
@@ -84,8 +92,9 @@ class Store(
     @Synchronized
     fun pc(pcId: String): Pc? = pcs[pcId]
 
+    /** A welcome from [pcId]: paired (again), connected now at [address] over [link]. */
     @Synchronized
-    fun remember(pcId: String, name: String, staticPub: ByteArray, pairingKey: ByteArray, btAddress: String?) {
+    fun remember(pcId: String, name: String, staticPub: ByteArray, pairingKey: ByteArray, btAddress: String?, address: String? = null, link: LinkKind? = null) {
         val existing = pcs[pcId]
         val sameKey = existing != null && existing.pairingKey.contentEquals(pairingKey) && existing.wrappedKey.isNotEmpty()
         pcs[pcId] = Pc(
@@ -95,7 +104,62 @@ class Store(
             btAddress = btAddress?.uppercase() ?: existing?.btAddress,
             settings = existing?.settings ?: offlineSettings,
             pending = existing?.pending ?: emptySet(),
+            blocked = existing?.blocked ?: false,
+            address = address ?: existing?.address,
+            lastLink = link ?: existing?.lastLink,
         )
+        save()
+    }
+
+    /** The connected link moved: [address] and [link] are where and how the PC is reached now. */
+    @Synchronized
+    fun connectedVia(pcId: String, address: String?, link: LinkKind? = null) {
+        val p = pcs[pcId] ?: return
+        val to = address ?: p.address
+        val via = link ?: p.lastLink
+        if (p.address == to && p.lastLink == via) return
+        p.address = to
+        p.lastLink = via
+        save()
+    }
+
+    /**
+     * The phone is connected to [pcId], or was until now: its last-connected time moves to now. Called while connected
+     * (once a minute, so a crash or a pulled cable leaves a close value) and when the connection ends.
+     */
+    @Synchronized
+    fun connectedNow(pcId: String) {
+        val p = pcs[pcId]?.takeIf { it.approved } ?: return
+        p.lastUsedAt = now()
+        save()
+    }
+
+    /**
+     * Blocks [pcId], remembering a PC never met so it stays blocked. [address] and [link], where it answered, are kept
+     * when none is known yet.
+     */
+    @Synchronized
+    fun block(pcId: String, name: String, address: String?, link: LinkKind? = null) {
+        val p = pcs[pcId]
+        if (p != null) {
+            p.blocked = true
+            if (name.isNotEmpty()) p.name = name
+            if (p.address == null) p.address = address
+            if (p.lastLink == null) p.lastLink = link
+        } else {
+            pcs[pcId] = Pc(
+                pcId, name, ByteArray(0), ByteArray(0), "", false, 0, 0, null, SettingValues.defaults(), emptySet(),
+                blocked = true, address = address, lastLink = link,
+            )
+        }
+        save()
+    }
+
+    /** Unblocks [pcId]; a PC that never paired is forgotten with it. */
+    @Synchronized
+    fun unblock(pcId: String) {
+        val p = pcs[pcId] ?: return
+        if (p.approved) p.blocked = false else pcs.remove(pcId)
         save()
     }
 
@@ -183,15 +247,23 @@ class Store(
                 o.optString("btAddress").ifEmpty { null },
                 SettingValues.defaults() + (o.optJSONObject("settings")?.let(::readSettings) ?: emptyMap()),
                 o.optJSONArray("pending")?.let { p -> (0 until p.length()).map { p.getString(it) }.toSet() } ?: emptySet(),
+                o.optBoolean("blocked"),
+                o.optString("address").ifEmpty { null },
+                o.optString("lastLink").let { l -> LinkKind.entries.firstOrNull { it.name == l } },
             )
         }
     }
 
+    /**
+     * A value at version 0 was never changed by anyone: it is the default of the build that saved it. It is left out, so
+     * a newer build's default takes its place (camera.ratio went from 16:9 to the full frame, for one).
+     */
     private fun readSettings(o: JSONObject): Map<String, Versioned> = o.keys().asSequence()
         .mapNotNull { id ->
             val v = o.optJSONObject(id) ?: return@mapNotNull null
             val value = v.optString("value")
-            if (SettingValues.isValid(id, value)) id to Versioned(value, v.optLong("version")) else null
+            val version = v.optLong("version")
+            if (version > 0 && SettingValues.isValid(id, value)) id to Versioned(value, version) else null
         }.toMap()
 
     private fun writeSettings(values: Map<String, Versioned>) =
@@ -214,6 +286,7 @@ class Store(
                             .put("pairingKey", p.wrappedKey)
                             .put("approved", p.approved).put("lastUsedAt", p.lastUsedAt).put("refusedAt", p.refusedAt)
                             .put("btAddress", p.btAddress ?: "").put("settings", writeSettings(p.settings)).put("pending", JSONArray(p.pending.toList()))
+                            .put("blocked", p.blocked).put("address", p.address ?: "").put("lastLink", p.lastLink?.name ?: "")
                     },
                 ),
             )

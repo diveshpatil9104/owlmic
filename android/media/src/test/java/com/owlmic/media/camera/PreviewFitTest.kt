@@ -7,7 +7,7 @@ import org.junit.Test
 
 class PreviewFitTest {
     @Test
-    fun anUprightPictureFitsWithBlackAround() {
+    fun anUprightPictureFitsWhole() {
         // 1280×720 in a 1080×1400 preview: full width, centred.
         assertArrayEquals(intArrayOf(0, 396, 1080, 607), fitPreview(1280, 720, 1080, 1400, 0))
     }

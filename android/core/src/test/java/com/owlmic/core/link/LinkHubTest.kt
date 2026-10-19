@@ -5,10 +5,12 @@ import com.owlmic.core.hexToBytes
 import com.owlmic.core.hub.Connection
 import com.owlmic.core.hub.LinkKind
 import com.owlmic.core.proto.AckStatus
+import com.owlmic.core.proto.Bye
 import com.owlmic.core.proto.Crypto
 import com.owlmic.core.proto.Frames
 import com.owlmic.core.proto.Hello
 import com.owlmic.core.proto.HelloAck
+import com.owlmic.core.proto.Message
 import com.owlmic.core.proto.Ping
 import com.owlmic.core.proto.Pong
 import com.owlmic.core.proto.Proto
@@ -24,6 +26,9 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -31,6 +36,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -47,6 +53,7 @@ class LinkHubTest {
     private val sessionId = "00112233445566778899aabbccddeeff"
     private val open = mutableListOf<Socket>()
     private val events = LinkedBlockingQueue<LinkEvent>()
+    private val hellos = LinkedBlockingQueue<Hello>()
 
     @Volatile private var clock = 1_000_000L
 
@@ -57,13 +64,15 @@ class LinkHubTest {
         media.close()
     }
 
-    private fun store() = Store(
+    /** [timed]: the store reads the test's clock, for what it records about time. */
+    private fun store(timed: Boolean = false) = Store(
         folder.root.resolve("s.json"),
         object : KeyWrapper {
             override fun wrap(secret: ByteArray) = secret
 
             override fun unwrap(blob: ByteArray) = blob
         },
+        now = if (timed) ({ clock }) else System::currentTimeMillis,
         write = Runnable::run,
     )
 
@@ -77,6 +86,7 @@ class LinkHubTest {
         val ch = ControlChannel(s.getInputStream(), s.getOutputStream(), s)
         val helloIn = ch.read() as Incoming.Control
         val hello = helloIn.message as Hello
+        hellos.put(hello)
         val eph = Crypto.generate()
         val nonce = Crypto.randomBytes(32)
         val ackBytes = ch.send(HelloAck(Proto.VERSION, pcId, "DESKTOP-A", pcKeys.public.toBase64(), eph.public.toBase64(), nonce.toBase64(), AckStatus.KNOWN, null))
@@ -192,6 +202,161 @@ class LinkHubTest {
         connectedOver(LinkKind.USB_TETHERING)
         assertEquals(LinkKind.USB_TETHERING, next<LinkEvent.Switched>().link)
         assertNotSame(wifiPath, router.active)
+        hub.close()
+    }
+
+    @Test
+    fun theLastConnectedTimeStaysFreshWhileConnectedAndIsSetWhenTheLinkGoes() {
+        val store = store(timed = true)
+        thread(isDaemon = true) {
+            runCatching {
+                keepAlive(welcomeNext())
+                welcomeNext()
+            }
+        }
+        val hub = hub(store)
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        connectedOver(LinkKind.WIFI)
+        assertEquals(1_000_000L, store.known().getValue(pcId).lastUsedAt)
+
+        // A minute on, still connected: saved again, so a crash now leaves a close value.
+        clock += 61_000
+        val deadline = System.currentTimeMillis() + 5_000
+        while (store.known().getValue(pcId).lastUsedAt != 1_061_000L && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        assertEquals(1_061_000L, store.known().getValue(pcId).lastUsedAt)
+
+        // The link goes: connected until now.
+        clock += 20_000
+        hub.post(LinkMsg.Reconnect)
+        next<LinkEvent.Held>()
+        assertEquals(1_081_000L, store.known().getValue(pcId).lastUsedAt)
+        hub.close()
+    }
+
+    @Test
+    fun aSwitchKeepsTheNewLinkAndAddressInTheHistory() {
+        val store = store()
+        thread(isDaemon = true) {
+            keepAlive(welcomeNext())
+            val cable = welcomeNext()
+            cable.send(Switch(LinkKind.USB_TETHERING.wire))
+            keepAlive(cable)
+        }
+        val hub = hub(store)
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        connectedOver(LinkKind.WIFI)
+        assertEquals(LinkKind.WIFI, store.known().getValue(pcId).lastLink)
+        assertEquals("${loopback.hostAddress}:${server.localPort}", store.known().getValue(pcId).address)
+
+        hub.post(LinkMsg.Found(candidate(LinkKind.USB_TETHERING)))
+        next<LinkEvent.Switched>()
+        assertEquals(LinkKind.USB_TETHERING, store.known().getValue(pcId).lastLink)
+        hub.close()
+    }
+
+    @Test
+    fun blockingTheConnectedPcSaysByeAndStaysAway() {
+        val store = store()
+        val got = LinkedBlockingQueue<Message>()
+        thread(isDaemon = true) {
+            val ch = welcomeNext()
+            runCatching {
+                while (true) {
+                    val m = (ch.read() as? Incoming.Control)?.message ?: continue
+                    if (m is Ping) ch.send(Pong(m.t))
+                    got.put(m)
+                }
+            }
+        }
+        val hub = hub(store)
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        connectedOver(LinkKind.WIFI)
+
+        hub.post(LinkMsg.Block(pcId, "DESKTOP-A"))
+        next<LinkEvent.Ended>()
+        next<LinkEvent.ConnectionChanged> { it.connection is Connection.Searching }
+        assertTrue(generateSequence { got.poll(2, TimeUnit.SECONDS) }.any { it is Bye })
+        assertTrue(store.known().getValue(pcId).blocked)
+
+        // It keeps answering discovery, but the phone never dials it again.
+        server.soTimeout = 1_500
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        assertThrows(SocketTimeoutException::class.java) { server.accept() }
+        hub.close()
+    }
+
+    @Test
+    fun anUnblockedPcIsDialledAgain() {
+        val store = store()
+        store.block(pcId, "DESKTOP-A", null)
+        val hub = hub(store)
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        server.soTimeout = 700
+        assertThrows(SocketTimeoutException::class.java) { server.accept() }
+        server.soTimeout = 0
+
+        thread(isDaemon = true) { runCatching { keepAlive(welcomeNext()) } }
+        hub.post(LinkMsg.Unblock(pcId))
+        connectedOver(LinkKind.WIFI)
+        assertTrue(store.known().getValue(pcId).approved && !store.known().getValue(pcId).blocked)
+        hub.close()
+    }
+
+    @Test
+    fun reconnectWhileConnectedResumesTheSessionOverAFreshHandshake() {
+        thread(isDaemon = true) {
+            runCatching {
+                keepAlive(welcomeNext())
+                keepAlive(welcomeNext())
+            }
+        }
+        val hub = hub()
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        connectedOver(LinkKind.WIFI)
+        assertNull(hellos.poll(1, TimeUnit.SECONDS).resume)
+
+        hub.post(LinkMsg.Reconnect)
+        next<LinkEvent.Held>()
+        connectedOver(LinkKind.WIFI)
+        assertEquals(sessionId, hellos.poll(1, TimeUnit.SECONDS).resume)
+        hub.close()
+    }
+
+    @Test
+    fun reconnectWhileSearchingRetriesWithoutWaitingOutTheBackoff() {
+        // A PC that answers discovery but hangs up on every handshake.
+        thread(isDaemon = true) { runCatching { while (true) server.accept().close() } }
+        val hub = hub()
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        next<LinkEvent.ConnectionChanged> { it.connection is Connection.Connecting }
+        next<LinkEvent.ConnectionChanged> { it.connection == Connection.Searching() }
+
+        // Without Reconnect, the next answer waits out the backoff (the clock doesn't move here).
+        hub.post(LinkMsg.Found(candidate(LinkKind.WIFI)))
+        Thread.sleep(300)
+        assertTrue(events.none { (it as? LinkEvent.ConnectionChanged)?.connection is Connection.Connecting })
+
+        hub.post(LinkMsg.Reconnect)
+        next<LinkEvent.ConnectionChanged> { it.connection is Connection.Connecting }
+        hub.close()
+    }
+
+    @Test
+    fun aBlockedPcBehindTheUsbTunnelIsLetGoAndNotDialledInALoop() {
+        val store = store()
+        store.block(pcId, "DESKTOP-A", null)
+        thread(isDaemon = true) { runCatching { welcomeNext() } }
+        val hub = hub(store)
+        fun tunnel() = Candidate(null, "", LinkKind.USB_DEBUGGING, opened = Socket(loopback, server.localPort).also { open += it })
+        hub.post(LinkMsg.Found(tunnel()))
+        next<LinkEvent.ConnectionChanged> { it.connection is Connection.Connecting }
+        next<LinkEvent.ConnectionChanged> { it.connection is Connection.Searching }
+
+        // The cable is still in and the tunnel answers again: the phone waits instead of shaking hands again.
+        hub.post(LinkMsg.Found(tunnel()))
+        Thread.sleep(500)
+        assertTrue(events.none { (it as? LinkEvent.ConnectionChanged)?.connection is Connection.Connecting })
+        assertEquals(1, hellos.size)
         hub.close()
     }
 }

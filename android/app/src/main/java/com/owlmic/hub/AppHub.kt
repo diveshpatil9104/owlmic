@@ -9,6 +9,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.provider.Settings.Global
 import com.owlmic.Owlmic
+import com.owlmic.core.design.SettingsModel
 import com.owlmic.core.hub.AppState
 import com.owlmic.core.hub.Connection
 import com.owlmic.core.hub.Feature
@@ -26,6 +27,7 @@ import com.owlmic.core.link.LinkEvent
 import com.owlmic.core.link.LinkHub
 import com.owlmic.core.link.LinkMsg
 import com.owlmic.core.link.MediaRouter
+import com.owlmic.core.link.PcMemory
 import com.owlmic.core.link.WifiNetwork
 import com.owlmic.core.proto.FeatureState
 import com.owlmic.core.proto.KeyframeRequest
@@ -49,6 +51,7 @@ import com.owlmic.media.audio.SpeakerFormat
 import com.owlmic.media.camera.CameraConfig
 import com.owlmic.media.camera.Lens
 import com.owlmic.media.camera.Orientation
+import com.owlmic.media.camera.Ratio
 import com.owlmic.media.camera.VideoPlan
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -91,6 +94,14 @@ sealed interface AppMsg {
     class RemoveAddress(val address: String) : AppMsg
 
     class Forget(val id: String) : AppMsg
+
+    /** The connection list's Block: never connect to this PC again until it is unblocked. */
+    class Block(val id: String, val name: String) : AppMsg
+
+    class Unblock(val id: String) : AppMsg
+
+    /** The connection list's Reconnect: drop the link and dial again, or search again without waiting. */
+    data object Reconnect : AppMsg
 
     data object TryBluetooth : AppMsg
 
@@ -210,6 +221,9 @@ class AppHub(private val app: Application, private val onState: (AppState) -> Un
                 state = state.copy(manualAddresses = store.addresses())
             }
             is AppMsg.Forget -> link.post(LinkMsg.Forget(message.id))
+            is AppMsg.Block -> link.post(LinkMsg.Block(message.id, message.name))
+            is AppMsg.Unblock -> link.post(LinkMsg.Unblock(message.id))
+            AppMsg.Reconnect -> link.post(LinkMsg.Reconnect)
             AppMsg.TryBluetooth -> link.post(LinkMsg.TryBluetooth)
             AppMsg.Opened -> link.post(LinkMsg.Opened)
             is AppMsg.Output -> state = state.copy(speakerOutput = message.output)
@@ -273,6 +287,8 @@ class AppHub(private val app: Application, private val onState: (AppState) -> Un
                 Feature.SPEAKER -> {
                     speakerPausedByPc = false
                     media.post(MediaMsg.Speaker(null, false, true))
+                    // Nothing plays now: the mic leaves the voice path its echo canceller needed.
+                    if (running(state.mic)) media.post(MediaMsg.Mic(micConfig()))
                 }
             }
         }
@@ -311,21 +327,12 @@ class AppHub(private val app: Application, private val onState: (AppState) -> Un
         sendState()
     }
 
-    private fun micConfig() = MicConfig(
-        codec = MicCodec.forLink(linkKind ?: LinkKind.WIFI),
-        voiceCommunication = state.speaker.isOn,
-        noiseReduction = state.settings["mic.noiseReduction"] != "off",
-        boostDb = when (state.settings["mic.boost"]) {
-            "plus6" -> 6
-            "plus12" -> 12
-            else -> 0
-        },
-    )
+    private fun micConfig() = MicConfig.of(MicCodec.forLink(linkKind ?: LinkKind.WIFI), state.speaker.isOn, state.settings)
 
     private fun startMic() {
         val c = micConfig()
         media.post(MediaMsg.Mic(c))
-        // Without a platform noise suppressor the PC runs its own when the setting is "phone".
+        // Without a platform noise suppressor the PC runs its own at the default noise reduction level.
         val params = JSONObject().put("sampleRate", 48_000).put("channels", 1).put("frameMs", c.codec.frameMs)
             .put("noiseSuppressor", NoiseSuppressor.isAvailable())
         link.post(LinkMsg.Send(StreamStart(Stream.MIC, c.codec.wire, params)))
@@ -333,20 +340,23 @@ class AppHub(private val app: Application, private val onState: (AppState) -> Un
 
     private fun startSpeaker() {
         val f = speakerFormat ?: return
-        media.post(MediaMsg.Speaker(f, state.mic.isOn, linkKind?.isWireless != false))
+        // With voice isolation the speaker plays as a call, so the mic's echo canceller hears it.
+        media.post(MediaMsg.Speaker(f, state.mic.isOn && MicConfig.isolates(state.settings), linkKind?.isWireless != false))
     }
 
     private fun cameraConfig(): CameraConfig {
         val s = state.settings
         val fps = s["camera.frameRate"]?.toIntOrNull() ?: 24
         return CameraConfig(
-            lens = if (s["camera.lens"] == "front") Lens.FRONT else Lens.BACK,
+            lens = if ((s["camera.lens"] ?: SettingsModel.find("camera.lens")?.default) == "back") Lens.BACK else Lens.FRONT,
             plan = VideoPlan.of(s["camera.quality"] ?: "auto", fps, linkKind ?: LinkKind.WIFI),
             orientation = when (s["camera.orientation"]) {
                 "landscape" -> Orientation.LANDSCAPE
                 "portrait" -> Orientation.PORTRAIT
                 else -> Orientation.AUTO
             },
+            ratio = Ratio.of(s["camera.ratio"]),
+            mirrorPreview = (s["camera.mirrorPreview"] ?: SettingsModel.find("camera.mirrorPreview")?.default) == "on",
         )
     }
 
@@ -541,10 +551,13 @@ class AppHub(private val app: Application, private val onState: (AppState) -> Un
         }
     }
 
+    /** Paired and blocked PCs: the connected one first, then the most recently connected. */
     private fun knownChanged() {
+        val connectedId = pcId.takeIf { state.connected }
         state = state.copy(
-            knownPcs = store.known().values.filter { it.approved }.sortedByDescending { it.lastUsedAt }
-                .map { KnownPcView(it.id, it.name, current = it.id == pcId && state.connected) },
+            knownPcs = store.known().values.filter { it.approved || it.blocked }
+                .sortedWith(compareByDescending<PcMemory> { it.id == connectedId }.thenByDescending { it.lastUsedAt })
+                .map { KnownPcView(it.id, it.name, it.id == connectedId, it.blocked, it.address, it.lastUsedAt, it.lastLink) },
         )
     }
 
@@ -557,6 +570,7 @@ class AppHub(private val app: Application, private val onState: (AppState) -> Un
                 state = state.copy(settings = e.values)
                 val changed = e.changed
                 if (changed.any { it.startsWith("mic.") } && running(state.mic)) media.post(MediaMsg.Mic(micConfig()))
+                if ("mic.isolation" in changed && state.speaker.isOn) startSpeaker()
                 if (changed.any { it.startsWith("camera.") } && running(state.camera)) media.post(MediaMsg.Camera(cameraConfig()))
                 if (changed.any { it.startsWith("link.") }) {
                     val allowed = LinkKind.entries.filter { k ->

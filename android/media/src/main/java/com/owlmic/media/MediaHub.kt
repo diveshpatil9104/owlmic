@@ -6,6 +6,8 @@ import com.owlmic.core.hub.Feature
 import com.owlmic.core.hub.Health
 import com.owlmic.core.hub.Hub
 import com.owlmic.core.link.MediaRouter
+import com.owlmic.media.audio.CallMode
+import com.owlmic.media.audio.FarEnd
 import com.owlmic.media.audio.MicConfig
 import com.owlmic.media.audio.MicPipeline
 import com.owlmic.media.audio.SpeakerFormat
@@ -48,7 +50,8 @@ sealed interface MediaEvent {
 /**
  * The Media Hub (section 11.1): starts, stops and reconfigures the mic, camera and speaker pipelines. Media itself
  * flows from the pipelines straight into the [MediaRouter], never through here. [levelFlow] receives the mic's level,
- * 0 to 1, every 50 ms while the mic is on, for the level bar.
+ * 0 to 1, every 50 ms while the mic is on, for the level bar. With voice isolation on both the mic and the Speaker, it
+ * puts the phone in communication mode ([CallMode]) before they open.
  */
 class MediaHub(
     context: Context,
@@ -56,13 +59,18 @@ class MediaHub(
     private val levelFlow: MutableStateFlow<Float>,
     private val emit: (MediaEvent) -> Unit,
 ) : Hub<MediaMsg>("media") {
-    private val mic = MicPipeline(router, onLevel = { levelFlow.value = it }, onHealth = { emit(MediaEvent.Health(Feature.MIC, it)) })
+    /** What the Speaker plays, heard by the mic's echo suppressor. */
+    private val farEnd = FarEnd()
+    private val callMode = CallMode(context)
+    private var micIsolated = false
+    private var speakerIsolated = false
+    private val mic = MicPipeline(router, onLevel = { levelFlow.value = it }, onHealth = { emit(MediaEvent.Health(Feature.MIC, it)) }, farEnd)
     private val camera = CameraPipeline(
         context, router,
         onFormat = { w, h, fps -> emit(MediaEvent.CameraFormat(w, h, fps)) },
         onHealth = { emit(MediaEvent.Health(Feature.CAMERA, it)) },
     )
-    private val speaker = SpeakerPipeline(onHealth = { emit(MediaEvent.Health(Feature.SPEAKER, it)) })
+    private val speaker = SpeakerPipeline(onHealth = { emit(MediaEvent.Health(Feature.SPEAKER, it)) }, farEnd)
     private var micOn = false
     private var cameraOn = false
     private var speakerFormat: SpeakerFormat? = null
@@ -81,6 +89,8 @@ class MediaHub(
         when (message) {
             is MediaMsg.Mic -> {
                 val c = message.config
+                micIsolated = c?.voiceCommunication == true
+                callMode.update(micIsolated, speakerIsolated)
                 when {
                     c == null -> if (micOn) {
                         mic.stop()
@@ -113,6 +123,8 @@ class MediaHub(
             MediaMsg.Keyframe -> camera.requestKeyframe()
             is MediaMsg.Speaker -> {
                 val f = message.format
+                speakerIsolated = f != null && message.voiceCommunication
+                callMode.update(micIsolated, speakerIsolated)
                 if (f == null) {
                     speaker.stop()
                     speakerFormat = null
@@ -147,6 +159,7 @@ class MediaHub(
         mic.stop()
         camera.stop()
         speaker.stop()
+        callMode.release()
         super.close()
     }
 }

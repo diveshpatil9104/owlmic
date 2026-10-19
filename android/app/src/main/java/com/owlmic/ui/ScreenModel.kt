@@ -7,51 +7,65 @@ import com.owlmic.core.hub.FeatureProblem
 import com.owlmic.core.hub.FeatureView
 import com.owlmic.core.hub.LinkKind
 
-/** The link tile's colour (section 36): green connected, yellow on the way or held, red when something needs the user. */
-enum class Tone { GREEN, YELLOW, RED }
-
-fun toneOf(c: Connection): Tone = when (c) {
-    is Connection.Connected -> if (c.weak) Tone.YELLOW else Tone.GREEN
-    is Connection.Searching -> if (c.unreachable != null) Tone.RED else Tone.YELLOW
-    is Connection.Choosing, is Connection.Connecting, is Connection.Approving, is Connection.Reconnecting, is Connection.Waiting -> Tone.YELLOW
-    is Connection.Denied, is Connection.Busy, is Connection.UpdateNeeded, is Connection.KeyChanged -> Tone.RED
-}
-
-/** The link tile's icon is the link; with no link yet, the unplugged cable. */
+/**
+ * The link tile's icon, always in the grid's ink: the link once connected; the globe until then; the alert when
+ * something needs the user.
+ */
 fun glyphOf(c: Connection): Glyph = when (c) {
     is Connection.Connected -> glyphOf(c.link)
-    is Connection.Connecting -> glyphOf(c.link)
-    is Connection.Approving -> glyphOf(c.link)
-    is Connection.Reconnecting -> glyphOf(c.link)
-    else -> Glyph.UNPLUG
+    is Connection.Searching -> if (c.unreachable != null) Glyph.ALERT else Glyph.GLOBE
+    is Connection.Denied, is Connection.Busy, is Connection.UpdateNeeded, is Connection.KeyChanged -> Glyph.ALERT
+    else -> Glyph.GLOBE
 }
 
-fun glyphOf(link: LinkKind?): Glyph = when (link) {
+fun glyphOf(link: LinkKind): Glyph = when (link) {
     LinkKind.USB_DEBUGGING -> Glyph.PLUG
     LinkKind.USB_TETHERING -> Glyph.CHAIN
     LinkKind.WIFI -> Glyph.WIFI
     LinkKind.BLUETOOTH -> Glyph.BLUETOOTH
-    null -> Glyph.UNPLUG
+}
+
+/** The link tile's icon dims softly in and out while the phone is on its way to a PC, so "not yet" reads without a colour. */
+fun pulses(c: Connection): Boolean = when (c) {
+    is Connection.Searching -> c.unreachable == null
+    is Connection.Connecting, is Connection.Approving, is Connection.Reconnecting, is Connection.Waiting -> true
+    else -> false
+}
+
+/**
+ * The status strip, only when there is something to read or do: the approval code, or a step only the user can take.
+ * Looking, connecting and reconnecting say nothing: the link tile shows them.
+ */
+enum class Strip { CODE, CHOOSE, DENIED, BUSY, UPDATE, KEY_CHANGED, TETHERING, BLUETOOTH }
+
+fun stripOf(state: AppState): Strip? = when (state.connection) {
+    is Connection.Approving -> Strip.CODE
+    is Connection.Choosing -> Strip.CHOOSE
+    is Connection.Denied -> Strip.DENIED
+    is Connection.Busy -> Strip.BUSY
+    is Connection.UpdateNeeded -> Strip.UPDATE
+    is Connection.KeyChanged -> Strip.KEY_CHANGED
+    // A cable is the better link, so the tethering hint wins over Bluetooth (section 14.1).
+    is Connection.Searching -> when {
+        state.tetherHint -> Strip.TETHERING
+        state.bluetoothOffer -> Strip.BLUETOOTH
+        else -> null
+    }
+    else -> null
 }
 
 /** What tapping the status strip does, when it does anything. */
 enum class StripAction { TETHERING, BLUETOOTH, ASK_AGAIN, CHOOSE }
 
-/** The status strip shows whenever the phone isn't connected; the main screen has no other status line. */
-fun showsStrip(state: AppState) = state.connection !is Connection.Connected
-
-/** The tethering hint shows while searching with a cable in and tethering off (section 14.1). */
-fun tethering(state: AppState) = state.tetherHint && state.connection is Connection.Searching
-
-fun stripAction(state: AppState): StripAction? = when {
-    state.connection is Connection.Choosing -> StripAction.CHOOSE
-    state.connection is Connection.Denied -> StripAction.ASK_AGAIN
-    tethering(state) -> StripAction.TETHERING
-    state.bluetoothOffer && state.connection is Connection.Searching -> StripAction.BLUETOOTH
+fun stripAction(strip: Strip?): StripAction? = when (strip) {
+    Strip.CHOOSE -> StripAction.CHOOSE
+    Strip.DENIED -> StripAction.ASK_AGAIN
+    Strip.TETHERING -> StripAction.TETHERING
+    Strip.BLUETOOTH -> StripAction.BLUETOOTH
     else -> null
 }
 
-/** A note under a feature tile's icon. [alert] ones are red. */
+/** Why a feature tile is the way it is, for screen readers: the tile itself shows only its icon. */
 enum class TileNote(val alert: Boolean) {
     PAUSED(false),
     RESTARTING(false),
@@ -72,38 +86,71 @@ fun lookOf(v: FeatureView): TileLook = when {
     else -> TileLook(v.isOn, null)
 }
 
-/** How a PC row in the connection list is marked. */
-enum class PcBadge { ACTIVE, READY, STANDBY }
+/** Where a PC sits in the connection list. */
+enum class PcKind { CURRENT, PAIRED, NEW, ADDRESS, BLOCKED }
 
 /**
- * One row of the connection list. [chooseId] makes the row tappable: a PC that answered and waits to be picked.
- * A manual address has no name: the row says "Direct IP" and shows the address.
+ * One entry of the connection list. [id] is null for an address added by hand. [canConnect]: the PC answered and
+ * waits to be picked. [lastConnectedAt] is 0 for never.
  */
 data class PcRow(
+    val id: String?,
     val name: String?,
-    val address: String?,
-    val link: LinkKind?,
-    val hotspot: Boolean,
-    val badge: PcBadge?,
-    val chooseId: String?,
-)
-
-/** The connected PC first, then PCs that answered, then other paired PCs, then addresses added by hand. */
-fun pcRows(state: AppState): List<PcRow> {
-    val rows = mutableListOf<PcRow>()
-    val c = state.connection as? Connection.Connected
-    if (c != null) rows += PcRow(c.pc, c.address, c.link, c.hotspot, PcBadge.ACTIVE, null)
-    state.choices.forEach { rows += PcRow(it.name, null, null, false, PcBadge.READY, it.id) }
-    val listed = state.choices.map { it.id }.toSet()
-    state.knownPcs.filter { !it.current && it.id !in listed }.forEach { rows += PcRow(it.name, null, null, false, PcBadge.STANDBY, null) }
-    state.manualAddresses.forEach { rows += PcRow(null, it, null, false, null, null) }
-    return rows
+    val kind: PcKind,
+    val address: String? = null,
+    val link: LinkKind? = null,
+    val hotspot: Boolean = false,
+    val lastConnectedAt: Long = 0,
+    val canConnect: Boolean = false,
+) {
+    /** Stable across updates, so an open entry stays open. */
+    val key get() = id ?: "address:$address"
 }
 
-/** The four links the connection list can switch off and on, with their settings. */
+/**
+ * The connection list: the connected PC first, then the other PCs this phone used (most recent first), new PCs that
+ * answered, and addresses added by hand; [blocked] go below a line.
+ */
+data class PcList(val rows: List<PcRow>, val blocked: List<PcRow>)
+
+fun pcList(state: AppState): PcList {
+    val rows = mutableListOf<PcRow>()
+    val waiting = state.choices.associateBy { it.id }
+    val c = state.connection as? Connection.Connected
+    val known = state.knownPcs.filter { !it.blocked }
+    if (c != null) {
+        val me = known.firstOrNull { it.current }
+        rows += PcRow(me?.id, c.pc, PcKind.CURRENT, c.address ?: me?.address, c.link, c.hotspot, me?.lastConnectedAt ?: 0)
+    }
+    known.filter { !(it.current && c != null) }.sortedByDescending { it.lastConnectedAt }.forEach {
+        rows += PcRow(
+            it.id, it.name, PcKind.PAIRED, waiting[it.id]?.address ?: it.address, waiting[it.id]?.link ?: it.lastLink,
+            lastConnectedAt = it.lastConnectedAt, canConnect = it.id in waiting,
+        )
+    }
+    val listed = state.knownPcs.map { it.id }.toSet()
+    state.choices.filter { it.id !in listed }.forEach { rows += PcRow(it.id, it.name, PcKind.NEW, it.address, it.link, canConnect = true) }
+    state.manualAddresses.forEach { rows += PcRow(null, null, PcKind.ADDRESS, it) }
+    val blocked = state.knownPcs.filter { it.blocked }.map { PcRow(it.id, it.name, PcKind.BLOCKED, it.address, it.lastLink, lastConnectedAt = it.lastConnectedAt) }
+    return PcList(rows, blocked)
+}
+
+/** The four links the connection list can switch off and on, with their settings: USB first, then Wi-Fi, then the rest. */
 val LINK_SETTINGS = listOf(
     LinkKind.USB_DEBUGGING to "link.usbDebugging",
-    LinkKind.USB_TETHERING to "link.usbTethering",
     LinkKind.WIFI to "link.wifi",
+    LinkKind.USB_TETHERING to "link.usbTethering",
     LinkKind.BLUETOOTH to "link.bluetooth",
 )
+
+/**
+ * The mic's level as the sound wave shows it: under -50 dBFS it is flat, normal speech reaches well up, loud speech the
+ * top. Only the picture: the mic's sound is untouched.
+ */
+fun waveLevel(level: Float): Float {
+    val v = ((level - 0.2f) / 0.8f).coerceIn(0f, 1f)
+    return (v * v * (1.4f - 0.4f * v) * WAVE_GAIN).coerceAtMost(1f)
+}
+
+/** The user's second review: the wave a fifth higher than the first round's. */
+private const val WAVE_GAIN = 1.2f
